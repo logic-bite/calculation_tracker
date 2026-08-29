@@ -1834,8 +1834,14 @@ tryAutoUnlock();
   swipeArea.addEventListener('pointerdown', (e)=>{
     if(e.pointerType==='mouse') return;
     if(excluded(e.target)) return;
+    if(dragging){ endTrack(); } // self-heal if a previous gesture never resolved
     dragging = true; decided = false; isHorizontal = false; dragDir = null;
     sx = e.clientX; sy = e.clientY;
+    // claim this pointer explicitly so we keep receiving its events for the
+    // whole gesture even if the finger drifts off swipeArea mid-swipe —
+    // without this, a slow/small swipe can lose its "finger lifted" event
+    // entirely, leaving the panel transform stuck halfway.
+    try{ swipeArea.setPointerCapture(e.pointerId); }catch(err){}
   });
   swipeArea.addEventListener('pointermove', (e)=>{
     if(!dragging) return;
@@ -1860,15 +1866,22 @@ tryAutoUnlock();
   function endTrack(e){
     if(!dragging) return;
     dragging = false;
+    try{ if(e && e.pointerId!=null) swipeArea.releasePointerCapture(e.pointerId); }catch(err){}
     if(!isHorizontal || !dragDir) return;
-    const dx = (e.clientX ?? sx) - sx;
+    const dx = (e && e.clientX!=null ? e.clientX : sx) - sx;
     const w = width();
     const moved = Math.abs(dx);
     const committed = moved > w * THRESH_COMMIT || moved > 60;
     if(committed) commit(dragDir); else cancel(dragDir);
   }
-  swipeArea.addEventListener('pointerup', endTrack);
-  swipeArea.addEventListener('pointercancel', endTrack);
+  // Listen on window (not just swipeArea) for the release events, so a slow
+  // swipe whose pointer ends up slightly outside swipeArea's box still gets
+  // caught. lostpointercapture is a safety net for the rare case the browser
+  // takes capture away from us mid-gesture without firing pointerup/cancel.
+  window.addEventListener('pointerup', endTrack);
+  window.addEventListener('pointercancel', endTrack);
+  swipeArea.addEventListener('lostpointercapture', endTrack);
+
 
   ensureCanonical();
   afterShow();
@@ -2764,7 +2777,17 @@ tryAutoUnlock();
     renderHeaderGrid();
     showToast('Controls reset to default layout');
   });
-  window.addEventListener('resize', renderHeaderGrid);
+  // Only rebuild the header layout when the viewport WIDTH actually changes
+  // (real resize / rotation). On mobile, opening the on-screen keyboard fires
+  // a resize event too because it shrinks the viewport HEIGHT — rebuilding
+  // the header grid on that would re-parent the friend-name input and yank
+  // focus away, closing the keyboard the instant it opened.
+  let __lastHeaderWidth = window.innerWidth;
+  window.addEventListener('resize', ()=>{
+    if(window.innerWidth === __lastHeaderWidth) return;
+    __lastHeaderWidth = window.innerWidth;
+    renderHeaderGrid();
+  });
 
   // ---------- logging + history ----------
   function dateKeyOf(ts){
