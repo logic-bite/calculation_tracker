@@ -1,0 +1,3210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Toolbox / Yours</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
+<link rel="icon" href="icon-512.png" type="image/png" sizes="512x512">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#E4E9F2">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Toolbox">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --bg:#E4E9F2;
+    --surface:#E4E9F2;
+    --shadow-dark:#AEB8C9;
+    --shadow-light:#FFFFFF;
+    --text:#33394A;
+    --text-dim:#7B8494;
+    --accent:#2F6E68;
+    --accent-text:#EAF3F1;
+    --danger:#C1666B;
+    --radius:18px;
+    --gap:12px;
+    /* fixed regardless of theme, so the toast text never disappears against its own background */
+    --toast-bg:#2A2E3A;
+    --toast-text:#F4F6FA;
+
+    /* ---- spacing you can tune by hand (all the "fixed gaps" live here now) ---- */
+    --gap-header-to-calc:0px;   /* space between the header widgets (date/friends/etc) and the calculator card */
+    --gap-calc-display:0px;    /* space below the calculator's number display */
+    --gap-calc-preview:0px;    /* space below the "= result" preview line, above the button grid */
+    --gap-calc-buttons:0px;    /* space below the button grid, above the history list */
+    --pad-date-input-y:2px;    /* top/bottom padding inside the Entry date input */
+    --pad-date-input-x:10px;   /* left/right padding inside the Entry date input */
+    --gap-date-row:8px;        /* gap between "Entry date" label / input / Today button */
+  }
+  html[data-theme="dark"]{
+    --bg:#1A1D26;
+    --surface:#1A1D26;
+    --shadow-dark:#0D0F14;
+    --shadow-light:#262A38;
+    --text:#E7EAF2;
+    --text-dim:#8A93A8;
+    --accent:#4FB3A6;
+    --accent-text:#0E211F;
+    --danger:#E28086;
+  }
+  html[data-theme="ocean"]{
+    --bg:#E3EEF5;
+    --surface:#E3EEF5;
+    --shadow-dark:#AFC7D6;
+    --shadow-light:#FFFFFF;
+    --text:#1F3A4A;
+    --text-dim:#5F7C8C;
+    --accent:#1F7A8C;
+    --accent-text:#EAF7F9;
+    --danger:#C1666B;
+  }
+  html[data-theme="forest"]{
+    --bg:#E6EDE3;
+    --surface:#E6EDE3;
+    --shadow-dark:#B7C7AD;
+    --shadow-light:#FFFFFF;
+    --text:#2C3B27;
+    --text-dim:#71856A;
+    --accent:#3F7D51;
+    --accent-text:#EAF5EC;
+    --danger:#B5533F;
+  }
+  html[data-theme="sunset"]{
+    --bg:#F3E7DE;
+    --surface:#F3E7DE;
+    --shadow-dark:#D9C1AF;
+    --shadow-light:#FFFFFF;
+    --text:#4A332A;
+    --text-dim:#9C7F70;
+    --accent:#D97A4D;
+    --accent-text:#FFF3EA;
+    --danger:#B5453F;
+  }
+  html[data-theme="nightshade"]{
+    --bg:#1B1726;
+    --surface:#1B1726;
+    --shadow-dark:#0E0B14;
+    --shadow-light:#2B2438;
+    --text:#EDE7F5;
+    --text-dim:#9A8FB0;
+    --accent:#9B6BD1;
+    --accent-text:#211732;
+    --danger:#E28086;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0;padding:0;
+    background:var(--bg);
+    font-family:'Manrope','Segoe UI',sans-serif;
+    color:var(--text);
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+  html{ transition:background .2s ease; }
+  body{ transition:background .2s ease, color .2s ease; }
+  .app{
+    max-width:560px;
+    margin:0 auto;
+    padding:20px 16px 40px;
+    min-height:100vh;
+  }
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:16px;
+  }
+  .brand{
+    font-family:'Space Mono','Courier New',monospace;
+    font-size:13px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .brand .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 0 3px rgba(47,110,104,0.2);
+  }
+  .icon-btn{
+    width:40px;height:40px;
+    border-radius:13px;
+    border:none;
+    background:var(--surface);
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    color:var(--text-dim);
+    transition:transform .15s ease, box-shadow .15s ease, color .15s ease;
+  }
+  .icon-btn:active{
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+    transform:scale(0.96);
+  }
+  .icon-btn.active{
+    color:var(--accent);
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+  }
+
+  /* ---- tool tabs ---- */
+  .tool-tabs{
+    display:flex;
+    gap:8px;
+    margin-bottom:18px;
+    overflow-x:auto;
+    padding-bottom:2px;
+  }
+  .tab{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    flex:0 0 auto;
+    padding:11px 16px;
+    border:none;
+    border-radius:16px;
+    background:var(--surface);
+    color:var(--text-dim);
+    font-family:'Manrope',sans-serif;
+    font-weight:700;
+    font-size:13px;
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    cursor:pointer;
+    white-space:nowrap;
+    transition:box-shadow .15s ease, color .15s ease;
+  }
+  .tab.active{
+    color:var(--accent-text);
+    background:var(--accent);
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+  }
+  .tab[disabled]{
+    opacity:.5;
+    cursor:default;
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+  }
+  .tab svg{width:16px;height:16px;flex:none;}
+
+  /* ---- section title / toggle row ---- */
+  .panel-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:12px;
+  }
+  .panel-title{
+    font-size:15px;
+    font-weight:800;
+  }
+  .panel-sub{
+    font-size:12px;
+    color:var(--text-dim);
+    margin-top:2px;
+  }
+  .toggle-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:11px;
+    color:var(--text-dim);
+    font-weight:700;
+  }
+  .switch{
+    width:38px;height:22px;
+    border-radius:20px;
+    background:var(--surface);
+    box-shadow:inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+    position:relative;
+    cursor:pointer;
+    flex:none;
+  }
+  .switch .knob{
+    position:absolute;
+    top:3px;left:3px;
+    width:16px;height:16px;
+    border-radius:50%;
+    background:var(--text-dim);
+    transition:left .18s ease, background .18s ease;
+  }
+  .switch.on{ }
+  .switch.on .knob{ left:19px; background:var(--accent); }
+
+  /* ---- stats ---- */
+  .stats-row{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    margin-bottom:16px;
+  }
+  .stat-card{
+    border-radius:16px;
+    padding:12px 8px;
+    text-align:center;
+    background:var(--surface);
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+  }
+  .stat-value{
+    font-family:'Space Mono',monospace;
+    font-size:24px;
+    font-weight:700;
+    color:var(--accent);
+  }
+  .stat-card.error .stat-value{ color:var(--danger); }
+  .stat-label{
+    font-size:10.5px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    margin-top:2px;
+    font-weight:700;
+  }
+
+  /* ---- editor ---- */
+  .editor-wrap{
+    position:relative;
+    border-radius:20px;
+    background:var(--surface);
+    box-shadow:inset 6px 6px 14px var(--shadow-dark), inset -6px -6px 14px var(--shadow-light);
+    margin-bottom:10px;
+    overflow:hidden;
+    height:220px;
+    min-height:120px;
+    max-height:80vh;
+  }
+  .resize-handle{
+    position:absolute;
+    right:6px;
+    bottom:6px;
+    width:32px;
+    height:32px;
+    border-radius:10px;
+    background:var(--surface);
+    box-shadow:3px 3px 7px var(--shadow-dark), -3px -3px 7px var(--shadow-light);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:nwse-resize;
+    z-index:3;
+    touch-action:none;
+    color:var(--text-dim);
+  }
+  .resize-handle:active{
+    box-shadow:inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+  }
+  .resize-handle svg{width:16px;height:16px;pointer-events:none;}
+  .highlight-layer{
+    position:absolute;
+    inset:0;
+    overflow:hidden;
+    pointer-events:none;
+    z-index:1;
+  }
+  .highlight-inner{
+    padding:16px 16px;
+    font-family:'Space Mono',monospace;
+    font-size:16px;
+    line-height:1.55;
+    white-space:pre-wrap;
+    word-wrap:break-word;
+    overflow-wrap:break-word;
+    color:var(--text);
+  }
+  .num-valid{
+    background:rgba(47,110,104,0.16);
+    border-radius:4px;
+    color:var(--accent);
+    font-weight:700;
+  }
+  .num-error{
+    background:rgba(193,102,107,0.28);
+    border-bottom:2px solid var(--danger);
+    border-radius:4px;
+    color:var(--danger);
+    font-weight:700;
+  }
+  .num-error.current{
+    background:rgba(193,102,107,0.5);
+  }
+  textarea.input-layer{
+    position:relative;
+    z-index:2;
+    display:block;
+    width:100%;
+    height:100%;
+    resize:none;
+    padding:16px 16px;
+    border:none;
+    outline:none;
+    background:transparent;
+    font-family:'Space Mono',monospace;
+    font-size:16px;
+    line-height:1.55;
+    color:rgba(51,57,74,0.02);
+    caret-color:var(--accent);
+    -webkit-text-fill-color:rgba(51,57,74,0.02);
+  }
+  textarea.input-layer::placeholder{
+    color:var(--text-dim);
+    -webkit-text-fill-color:var(--text-dim);
+    opacity:.75;
+  }
+  .resize-hint{
+    text-align:center;
+    font-size:10.5px;
+    color:var(--text-dim);
+    margin:-2px 0 14px;
+    letter-spacing:0.04em;
+  }
+
+  /* ---- error nav ---- */
+  .error-nav{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:var(--surface);
+    border-radius:14px;
+    padding:8px 10px;
+    margin-bottom:14px;
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+  }
+  .nav-btn{
+    border:none;
+    background:transparent;
+    color:var(--accent);
+    font-weight:800;
+    font-size:13px;
+    padding:8px 12px;
+    border-radius:10px;
+    cursor:pointer;
+  }
+  .nav-btn:active{
+    box-shadow:inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+  }
+  .error-info{
+    font-family:'Space Mono',monospace;
+    font-size:12px;
+    color:var(--danger);
+    font-weight:700;
+  }
+
+  /* ---- error chip list ---- */
+  .error-list{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-bottom:16px;
+  }
+  .error-chip{
+    font-family:'Space Mono',monospace;
+    font-size:12px;
+    font-weight:700;
+    color:var(--danger);
+    background:var(--surface);
+    border:none;
+    padding:7px 12px;
+    border-radius:12px;
+    box-shadow:4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
+    cursor:pointer;
+  }
+  .error-chip:active{
+    box-shadow:inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+  }
+
+  /* ---- action row ---- */
+  .action-row{
+    display:flex;
+    gap:10px;
+  }
+  .tool-btn{
+    flex:1;
+    padding:13px 8px;
+    border:none;
+    border-radius:15px;
+    background:var(--surface);
+    color:var(--text);
+    font-family:'Manrope',sans-serif;
+    font-weight:700;
+    font-size:13px;
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+  }
+  .tool-btn:active{
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+    transform:scale(0.98);
+  }
+  .tool-btn.accent{
+    background:var(--accent);
+    color:var(--accent-text);
+  }
+  .tool-btn svg{width:16px;height:16px;}
+
+  .toast{
+    position:fixed;
+    left:50%;bottom:26px;
+    transform:translateX(-50%) translateY(20px);
+    background:var(--toast-bg);
+    color:var(--toast-text);
+    font-size:13px;
+    font-weight:600;
+    padding:11px 18px;
+    border-radius:12px;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s ease, transform .2s ease;
+    z-index:50;
+    max-width:80vw;
+    text-align:center;
+  }
+  .toast.show{
+    opacity:1;
+    pointer-events:auto;
+    transform:translateX(-50%) translateY(0);
+  }
+  .toast.dragging{ transition:none; }
+  .toast{ display:flex; align-items:center; gap:12px; touch-action:pan-y; }
+  .toast-action{
+    border:none;
+    background:rgba(255,255,255,0.16);
+    color:#F4F6FA;
+    font-weight:800;
+    font-size:12.5px;
+    padding:6px 10px;
+    border-radius:8px;
+    cursor:pointer;
+    flex:none;
+  }
+
+  .swipe-area{
+    position:relative;
+    overflow:hidden;
+    touch-action:pan-y;
+  }
+  .swipe-track{
+    display:flex;
+    width:200%;
+    align-items:flex-start;
+    will-change:transform;
+  }
+  .swipe-track > div{
+    flex:0 0 50%;
+    width:50%;
+    min-width:0;
+  }
+
+  .header-toolbar{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:8px;
+    margin-bottom:10px;
+  }
+  .header-grid{
+    position:relative;
+    margin-bottom:var(--gap-header-to-calc);
+  }
+  .header-tile{
+    position:absolute;
+    box-sizing:border-box;
+    padding:3px;
+    border-radius:16px;
+  }
+  .header-tile .widget-body{
+    width:100%;height:100%;
+    overflow:auto;
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  .header-tile.editing{
+    box-shadow:0 0 0 2px var(--accent);
+    border-radius:16px;
+    cursor:grab;
+    touch-action:none;
+  }
+  .header-tile.editing:active{ cursor:grabbing; }
+  .header-tile.editing .widget-body{ pointer-events:none; }
+  .mini-btn{
+    flex:none;
+    border:none;
+    background:var(--surface);
+    box-shadow:4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
+    color:var(--text-dim);
+    font-size:11px;
+    font-weight:800;
+    padding:8px 11px;
+    border-radius:11px;
+    cursor:pointer;
+    display:flex;align-items:center;gap:5px;
+    white-space:nowrap;
+  }
+  .mini-btn.on{ color:var(--accent-text); background:var(--accent); }
+  .mini-btn svg{ width:13px;height:13px; }
+
+  .friend-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    align-items:center;
+    flex:1;
+  }
+  .friend-chip{
+    font-family:'Manrope',sans-serif;
+    font-size:13px;
+    font-weight:700;
+    color:var(--text-dim);
+    background:var(--surface);
+    border:none;
+    padding:9px 14px;
+    border-radius:13px;
+    box-shadow:4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .friend-chip.active{
+    color:var(--accent-text);
+    background:var(--accent);
+  }
+  .friend-chip:active{ transform:scale(0.97); }
+  .friend-chip-wrap{
+    position:relative;
+    display:inline-flex;
+  }
+  .friend-chip-wrap.editing .friend-chip{
+    box-shadow:0 0 0 2px var(--accent);
+    padding-right:14px;
+  }
+  .chip-del{
+    position:absolute;
+    top:-7px;right:-7px;
+    width:19px;height:19px;
+    border-radius:50%;
+    background:var(--danger);
+    color:#fff;
+    border:2px solid var(--bg);
+    font-size:11px;font-weight:800;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    z-index:3;
+    line-height:1;
+  }
+  .friend-add{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    background:var(--surface);
+    border-radius:13px;
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+    padding:4px 6px 4px 12px;
+  }
+  .friend-add input{
+    border:none;background:transparent;outline:none;
+    font-family:'Manrope',sans-serif;font-size:13px;color:var(--text);
+    width:92px;
+  }
+  .friend-add button{
+    border:none;
+    background:var(--accent);
+    color:var(--accent-text);
+    width:28px;height:28px;
+    border-radius:9px;
+    font-size:16px;font-weight:800;
+    cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  .calc-card{
+    background:var(--surface);
+    border-radius:20px;
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    padding:14px;
+    margin-bottom:18px;
+  }
+  .active-friend-label{
+    font-size:12px;
+    font-weight:700;
+    color:var(--text-dim);
+  }
+  .active-friend-label b{ color:var(--accent); }
+
+  .log-date-row{
+    display:flex;
+    align-items:center;
+    gap:var(--gap-date-row);
+    margin-bottom:0;
+  }
+  .log-date-label{
+    font-size:11px;
+    font-weight:700;
+    color:var(--text-dim);
+    flex:none;
+    white-space:nowrap;
+  }
+  .date-input{
+    flex:1;
+    min-width:0;
+    border:none;
+    background:var(--surface);
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+    color:var(--text);
+    font-family:'Manrope',sans-serif;
+    font-size:12.5px;
+    font-weight:700;
+    padding:var(--pad-date-input-y) var(--pad-date-input-x);
+    border-radius:11px;
+    outline:none;
+    transition:box-shadow .15s ease;
+  }
+  .date-input.backdated{
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light), 0 0 0 2px var(--accent);
+    color:var(--accent);
+  }
+  html[data-theme="dark"] .date-input::-webkit-calendar-picker-indicator,
+  html[data-theme="nightshade"] .date-input::-webkit-calendar-picker-indicator{ filter:invert(1); }
+  .today-btn{
+    flex:none;
+    border:none;
+    background:var(--surface);
+    box-shadow:4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
+    color:var(--accent);
+    font-size:11px;
+    font-weight:800;
+    padding:8px 11px;
+    border-radius:11px;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .today-btn:active{
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+  }
+  .edit-layout-btn{
+    border:none;
+    background:var(--surface);
+    box-shadow:4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
+    color:var(--text-dim);
+    font-size:11.5px;
+    font-weight:800;
+    padding:8px 12px;
+    border-radius:11px;
+    cursor:pointer;
+    display:flex;align-items:center;gap:6px;
+  }
+  .edit-layout-btn.on{
+    color:var(--accent-text);
+    background:var(--accent);
+  }
+  .edit-layout-btn svg{width:14px;height:14px;}
+
+  .calc-display-wrap{
+    position:relative;
+    background:var(--surface);
+    border-radius:14px;
+    box-shadow:inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
+    margin-bottom:var(--gap-calc-display);
+    height:66px;
+    min-height:52px;
+    max-height:50vh;
+    overflow:hidden;
+  }
+  #calcMirror{
+    position:absolute; inset:0;
+    padding:12px 44px 12px 14px;
+    box-sizing:border-box;
+    overflow-y:auto;
+    overflow-x:hidden;
+    touch-action:pan-y;
+    font-family:'Space Mono',monospace;
+    font-size:22px;font-weight:700;
+    color:var(--text);
+    text-align:right;
+    white-space:pre-wrap;
+    word-break:break-all;
+    line-height:1.3;
+    cursor:text;
+    -webkit-user-select:none; user-select:none;
+  }
+  #calcMirrorText{ white-space:pre-wrap; word-break:break-all; }
+  #calcCursor{
+    position:absolute;
+    width:2px;
+    background:var(--accent);
+    border-radius:1px;
+    pointer-events:none;
+    height:1.3em;
+    animation:calcBlink 1s steps(1) infinite;
+  }
+  @keyframes calcBlink{ 50%{ opacity:0; } }
+  #calcDisplay{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    border:none;background:transparent;outline:none;
+    resize:none;
+    color:transparent;
+    caret-color:transparent;
+    font-family:'Space Mono',monospace;
+    font-size:22px;font-weight:700;
+    text-align:right;
+    white-space:pre-wrap;
+    word-break:break-all;
+    overflow:hidden;
+    opacity:0;
+    pointer-events:none;
+  }
+  .calc-display-wrap .resize-handle{
+    right:4px;
+    bottom:4px;
+    width:26px;
+    height:26px;
+    z-index:2;
+  }
+  .calc-preview{
+    text-align:right;
+    font-family:'Space Mono',monospace;
+    font-size:22px;
+    font-weight:800;
+    color:var(--accent);
+    min-height:28px;
+    margin-bottom:var(--gap-calc-preview);
+  }
+  .calc-preview.err{ color:var(--danger); }
+
+  .btn-grid{
+    position:relative;
+    margin-bottom:var(--gap-calc-buttons);
+  }
+  .btn-tile{
+    position:absolute;
+    border:4px solid var(--surface);
+    border-radius:13px;
+    background:var(--surface);
+    background-clip:padding-box;
+    color:var(--text);
+    font-family:'Space Mono',monospace;
+    font-size:16px;
+    font-weight:700;
+    box-shadow:4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    touch-action:none;
+    user-select:none;
+  }
+  .btn-tile:active{
+    box-shadow:inset 2px 2px 6px var(--shadow-dark), inset -2px -2px 6px var(--shadow-light);
+  }
+  .btn-tile.accent{
+    background:var(--accent);
+    color:var(--accent-text);
+    font-family:'Manrope',sans-serif;
+    font-size:12.5px;
+  }
+  .btn-tile.op{ color:var(--accent); }
+  .btn-tile.editing{
+    box-shadow:0 0 0 2px var(--accent);
+    cursor:grab;
+  }
+  .btn-tile.editing:active{ cursor:grabbing; }
+  .tile-delete{
+    position:absolute;
+    top:-7px;right:-7px;
+    width:20px;height:20px;
+    border-radius:50%;
+    background:var(--danger);
+    color:#fff;
+    border:2px solid var(--bg);
+    font-size:12px;font-weight:800;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    z-index:5;
+  }
+  .tile-resize{
+    position:absolute;
+    right:2px;bottom:2px;
+    width:16px;height:16px;
+    cursor:nwse-resize;
+    z-index:5;
+    color:inherit;
+    opacity:.55;
+  }
+  .tile-resize svg{width:100%;height:100%;}
+  .btn-tile.add-tile{
+    border:2px dashed var(--shadow-dark);
+    background:transparent;
+    box-shadow:none;
+    color:var(--text-dim);
+    font-size:22px;
+  }
+
+  .day-group{
+    margin-bottom:14px;
+    background:var(--surface);
+    border-radius:18px;
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    overflow:hidden;
+  }
+  .day-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:14px 16px;
+    cursor:pointer;
+  }
+  .day-head-title{
+    font-weight:800;
+    font-size:14px;
+  }
+  .day-head-sub{
+    font-size:11px;
+    color:var(--text-dim);
+    margin-top:2px;
+    font-family:'Space Mono',monospace;
+  }
+  .day-chevron{
+    color:var(--text-dim);
+    transition:transform .15s ease;
+  }
+  .day-group.collapsed .day-chevron{ transform:rotate(-90deg); }
+  .day-body{ padding:0 16px 14px; }
+  .day-group.collapsed .day-body{ display:none; }
+
+  .friend-subtotals{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-bottom:12px;
+  }
+  .subtotal-card{
+    background:var(--surface);
+    border-radius:12px;
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+    padding:8px 12px;
+    font-size:11.5px;
+  }
+  .subtotal-card .name{ font-weight:800; color:var(--text); }
+  .subtotal-card .vals{ color:var(--text-dim); font-family:'Space Mono',monospace; margin-top:2px; }
+  .net-pos{ color:var(--accent); font-weight:800; }
+  .net-neg{ color:var(--danger); font-weight:800; }
+  .net-zero{ color:var(--text-dim); font-weight:800; }
+
+  .entry-line{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:8px;
+    padding:9px 0;
+    border-top:1px solid rgba(123,132,148,0.16);
+    font-size:12.5px;
+  }
+  .entry-line:first-child{ border-top:none; }
+  .entry-main{ flex:1; }
+  .entry-time{ color:var(--text-dim); font-family:'Space Mono',monospace; font-size:10.5px; }
+  .entry-friend{ font-weight:800; }
+  .entry-detail{ color:var(--text-dim); font-family:'Space Mono',monospace; margin-top:2px; }
+  .entry-detail b{ color:var(--accent); }
+  .entry-detail.pass b{ color:var(--danger); }
+  .entry-actions{
+    display:flex;
+    gap:10px;
+    flex:none;
+  }
+  .entry-del, .entry-edit{
+    border:none;background:transparent;color:var(--text-dim);
+    cursor:pointer;padding:2px;flex:none;
+  }
+  .entry-edit:active, .entry-del:active{ color:var(--accent); }
+  .entry-del svg, .entry-edit svg{width:15px;height:15px;}
+
+  .history-filter-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:10px;
+    font-size:12.5px;
+    color:var(--text-dim);
+    font-weight:700;
+  }
+  .history-filter-row select{
+    flex:1;
+    max-width:220px;
+    padding:8px 10px;
+    border:none;
+    border-radius:11px;
+    background:var(--surface);
+    box-shadow:4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
+    font-family:'Manrope',sans-serif;
+    font-size:13px;
+    font-weight:700;
+    color:var(--text);
+    outline:none;
+  }
+  .empty-hint{
+    text-align:center;
+    color:var(--text-dim);
+    font-size:12.5px;
+    padding:20px 10px;
+  }
+
+  .modal-overlay{
+    position:fixed;inset:0;
+    background:rgba(51,57,74,0.35);
+    display:flex;align-items:center;justify-content:center;
+    z-index:100;
+    padding:20px;
+  }
+  .modal-card{
+    background:var(--bg);
+    border-radius:20px;
+    box-shadow:8px 8px 18px var(--shadow-dark), -8px -8px 18px var(--shadow-light);
+    padding:20px;
+    width:100%;
+    max-width:320px;
+  }
+  .modal-card h3{ margin:0 0 14px; font-size:15px; }
+  .modal-card label{ font-size:11.5px; color:var(--text-dim); font-weight:700; }
+  .modal-card input{
+    width:100%;
+    margin:6px 0 14px;
+    padding:10px 12px;
+    border:none;
+    border-radius:12px;
+    background:var(--surface);
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+    font-family:'Manrope',sans-serif;
+    font-size:14px;
+    color:var(--text);
+    outline:none;
+  }
+  .modal-card select{
+    width:100%;
+    margin:6px 0 14px;
+    padding:10px 12px;
+    border:none;
+    border-radius:12px;
+    background:var(--surface);
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+    font-family:'Manrope',sans-serif;
+    font-size:14px;
+    color:var(--text);
+    outline:none;
+  }
+  .modal-card p{ font-size:13px; color:var(--text-dim); line-height:1.5; margin:0 0 14px; }
+  .modal-actions{ display:flex; gap:10px; }
+  .modal-actions button{
+    flex:1;
+    padding:11px;
+    border:none;
+    border-radius:13px;
+    font-weight:700;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .modal-actions .cancel{ background:var(--surface); color:var(--text-dim); }
+  .modal-actions .confirm{ background:var(--accent); color:var(--accent-text); }
+  .modal-actions .confirm.danger{ background:var(--danger); color:#fff; }
+  .backup-row{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    background:var(--surface);
+    border-radius:15px;
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    padding:14px;
+    margin-bottom:12px;
+    cursor:pointer;
+  }
+  .backup-row:active{ box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light); }
+  .backup-row svg{ width:20px;height:20px; color:var(--accent); flex:none; }
+  .backup-row .txt b{ display:block; font-size:13.5px; }
+  .backup-row .txt span{ display:block; font-size:11.5px; color:var(--text-dim); margin-top:2px; }
+
+  .theme-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:16px 10px;
+    margin-bottom:16px;
+  }
+  .theme-cell{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+  }
+  .theme-swatch{
+    width:48px;height:48px;
+    border-radius:50%;
+    border:2px solid transparent;
+    padding:0;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    position:relative;
+    box-shadow:3px 3px 7px rgba(0,0,0,0.18), -2px -2px 5px rgba(255,255,255,0.5);
+  }
+  .theme-swatch.active{ border-color:var(--accent); }
+  .theme-swatch:active{ transform:scale(0.94); }
+  .theme-swatch-dot{
+    width:18px;height:18px;
+    border-radius:50%;
+  }
+  .theme-swatch-check{
+    position:absolute;
+    top:-4px;right:-4px;
+    width:17px;height:17px;
+    border-radius:50%;
+    background:var(--accent);
+    color:var(--accent-text);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .theme-swatch-check svg{ width:11px;height:11px; }
+  .theme-name{
+    font-size:11px;
+    font-weight:700;
+    color:var(--text-dim);
+    text-align:center;
+  }
+
+  /* ---- save status pill ---- */
+  .save-status{
+    display:none;
+    align-items:center;
+    gap:6px;
+    font-size:10.5px;
+    font-weight:700;
+    color:var(--text-dim);
+    padding:6px 10px;
+    border-radius:12px;
+    background:var(--surface);
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+    white-space:nowrap;
+  }
+  .save-status::before{
+    content:'';
+    width:7px;height:7px;border-radius:50%;
+    background:var(--text-dim);
+    flex:none;
+  }
+  .save-status.is-saving::before{ background:#D9A441; animation:pulseDot 1s ease-in-out infinite; }
+  .save-status.is-saved::before{ background:var(--accent); }
+  .save-status.is-saved{ color:var(--accent); }
+  .save-status.is-offline::before{ background:var(--danger); }
+  .save-status.is-offline{ color:var(--danger); }
+  .save-status.is-error::before{ background:var(--danger); animation:pulseDot 1s ease-in-out infinite; }
+  .save-status.is-error{ color:var(--danger); }
+  @keyframes pulseDot{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+
+  /* ---- lock overlay ---- */
+  .lock-overlay{
+    display:none;
+    position:fixed; inset:0;
+    z-index:9999;
+    background:var(--bg);
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .lock-overlay.visible{ display:flex; }
+  .lock-card{
+    width:100%;
+    max-width:320px;
+    background:var(--surface);
+    border-radius:22px;
+    padding:28px 24px;
+    box-shadow:8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+    text-align:center;
+  }
+  .lock-card h2{
+    font-size:16px;
+    margin:0 0 6px;
+    color:var(--text);
+  }
+  .lock-card p{
+    font-size:12.5px;
+    color:var(--text-dim);
+    margin:0 0 18px;
+  }
+  .lock-card input{
+    width:100%;
+    text-align:center;
+    letter-spacing:0.3em;
+    font-size:20px;
+    font-weight:800;
+    padding:14px 10px;
+    border:none;
+    border-radius:14px;
+    background:var(--surface);
+    color:var(--text);
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+    margin-bottom:14px;
+    font-family:'Manrope',sans-serif;
+  }
+  .lock-card input:focus{ outline:2px solid var(--accent); outline-offset:2px; }
+  .lock-card button{
+    width:100%;
+    padding:13px;
+    border:none;
+    border-radius:14px;
+    background:var(--accent);
+    color:var(--accent-text);
+    font-weight:800;
+    font-size:14px;
+    cursor:pointer;
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+  }
+  .lock-card button:disabled{ opacity:.6; cursor:default; }
+  .lock-error{
+    min-height:16px;
+    font-size:12px;
+    font-weight:700;
+    color:var(--danger);
+    margin-top:10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="lock-overlay" id="lockOverlay">
+  <div class="lock-card">
+    <h2>Enter your PIN</h2>
+    <p>Unlocks this browser for 30 days</p>
+    <form id="lockForm" autocomplete="off">
+      <input type="password" inputmode="numeric" id="lockPinInput" placeholder="••••••" autocomplete="off">
+      <button type="submit" id="lockSubmit">Unlock</button>
+    </form>
+    <div class="lock-error" id="lockError"></div>
+  </div>
+</div>
+
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span>TOOLBOX / YOURS</div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <div class="save-status" id="saveStatus"></div>
+      <button class="icon-btn" id="themeBtn" title="Toggle day/night mode">
+        <svg id="themeIconMoon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.6A9 9 0 1 1 11.4 3a7 7 0 0 0 9.6 9.6Z"/></svg>
+      </button>
+      <button class="icon-btn" id="backupBtn" title="Backup &amp; restore">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+      </button>
+      <button class="icon-btn" id="infoBtn" title="How it works">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.6" r="0.6" fill="currentColor" stroke="none"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="tool-tabs">
+    <button class="tab active" data-tool="calclog">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h4"/></svg>
+      Calc Log
+    </button>
+    <button class="tab" data-tool="numbers">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 4v16M15 4v16M4 9h16M4 15h16"/></svg>
+      Number Counter
+    </button>
+    <button class="tab" disabled>+ More soon</button>
+  </div>
+
+  <div class="swipe-area" id="swipeArea">
+  <div class="swipe-track" id="swipeTrack">
+    <div id="slotLeft"></div>
+    <div id="slotRight"></div>
+  </div>
+
+  <div id="numbersPanel" style="display:none;">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">Count two-digit numbers</div>
+        <div class="panel-sub">Any separator works — commas, new lines, dots, brackets…</div>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-value" id="validCount">0</div>
+        <div class="stat-label">Valid</div>
+      </div>
+      <div class="stat-card error">
+        <div class="stat-value" id="errorCount">0</div>
+        <div class="stat-label">Errors</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalCount">0</div>
+        <div class="stat-label">Total</div>
+      </div>
+    </div>
+
+    <div class="editor-wrap">
+      <div class="highlight-layer"><div class="highlight-inner" id="highlightInner"></div></div>
+      <textarea class="input-layer" id="inputArea" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="Paste or type numbers here, e.g.&#10;12, 14, 25&#10;38&#10;86(46"></textarea>
+      <div class="resize-handle" id="resizeHandle" title="Drag to resize">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="17" cy="17" r="1.6"/><circle cx="17" cy="11" r="1.6"/><circle cx="11" cy="17" r="1.6"/></svg>
+      </div>
+    </div>
+    <div class="resize-hint">⌐ drag the bottom-right button to resize the box</div>
+
+    <div class="error-nav" id="errorNav" style="display:none;">
+      <button class="nav-btn" id="prevErrBtn">‹ Prev</button>
+      <div class="error-info" id="errorInfo">Error 1 of 1</div>
+      <button class="nav-btn" id="nextErrBtn">Next ›</button>
+    </div>
+
+    <div class="error-list" id="errorList"></div>
+
+    <div class="action-row">
+      <button class="tool-btn" id="pasteBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="4" width="10" height="4" rx="1.2"/><path d="M9 4H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/></svg>
+        Paste
+      </button>
+      <button class="tool-btn" id="clearInputBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12"/></svg>
+        Clear
+      </button>
+      <button class="tool-btn accent" id="copyStatsBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        Copy Result
+      </button>
+    </div>
+
+    <div class="toggle-row" style="margin-top:16px; justify-content:flex-start;">
+      <div class="switch on" id="autoJumpSwitch"><div class="knob"></div></div>
+      <span>Auto-jump to new errors when I pause typing</span>
+    </div>
+  </div>
+
+  <div id="calcPanel" style="display:none;">
+    <div class="header-toolbar">
+      <div style="display:flex; gap:8px;">
+        <button class="mini-btn" id="editLabelsBtn" title="Rename or blank out labels">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <span>Labels</span>
+        </button>
+        <button class="mini-btn" id="resetHeaderBtn" title="Reset to default layout" style="display:none;">Reset</button>
+        <button class="mini-btn" id="rearrangeHeaderBtn" title="Rearrange these controls">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l4-4 4 4M9 5v14M19 15l-4 4-4-4M15 19V5"/></svg>
+          <span id="rearrangeHeaderLabel">Rearrange</span>
+        </button>
+      </div>
+    </div>
+    <div class="header-grid" id="headerGrid"></div>
+
+    <div id="widgetTemplates" style="display:none;">
+      <div id="widgetFriends" class="widget-body">
+        <div class="friend-row" id="friendRow"></div>
+      </div>
+      <div id="widgetManage" class="widget-body">
+        <button class="mini-btn" id="editFriendsBtn" title="Rename or delete friends">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <span id="editFriendsLabel">Manage</span>
+        </button>
+      </div>
+      <div id="widgetLoggingLabel" class="widget-body">
+        <div class="active-friend-label" id="activeFriendLabel">Pick a friend above</div>
+      </div>
+      <div id="widgetLayoutBtns" class="widget-body">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="edit-layout-btn" id="restoreBtn" title="Restore missing core buttons" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+            Restore
+          </button>
+          <button class="edit-layout-btn" id="editLayoutBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <span id="editLayoutLabelText">Edit Layout</span>
+          </button>
+        </div>
+      </div>
+      <div id="widgetEntryDate" class="widget-body">
+        <div class="log-date-row" style="margin-bottom:0;">
+          <span class="log-date-label" id="entryDateLabelText">Entry date</span>
+          <input type="date" class="date-input" id="logDateInput">
+          <button class="today-btn" id="resetDateBtn" style="display:none;">Today</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="calc-card">
+      <div class="calc-display-wrap" id="calcDisplayWrap">
+        <div id="calcMirror"><span id="calcMirrorText"></span><div id="calcCursor"></div></div>
+        <textarea id="calcDisplay" inputmode="none" readonly autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="0"></textarea>
+        <div class="resize-handle" id="calcResizeHandle" title="Drag to resize">
+          <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="17" cy="17" r="1.6"/><circle cx="17" cy="11" r="1.6"/><circle cx="11" cy="17" r="1.6"/></svg>
+        </div>
+      </div>
+      <div class="calc-preview" id="calcPreview">&nbsp;</div>
+      <div class="btn-grid" id="btnGrid"></div>
+    </div>
+
+    <div class="history-filter-row">
+      <label for="historyFilter">Showing</label>
+      <select id="historyFilter">
+        <option value="all">All friends</option>
+      </select>
+    </div>
+    <div id="historyWrap"></div>
+  </div>
+
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div id="modalRoot"></div>
+
+<script>
+/* ============================================================
+   SUPABASE CONFIG — fill these in after you set up your project.
+   See the setup guide for exact steps to get these three values.
+   Until you fill these in (replace the YOUR_... placeholders),
+   the app runs unlocked with local-only storage, same as before.
+============================================================ */
+const SUPABASE_URL = 'https://ffulfucazvgmhvvprquf.supabase.co';           // e.g. https://abcdefgh.supabase.co
+const SUPABASE_ANON_KEY = 'sb_publishable_MeZQQaleGFcC32PW-7JmvQ_5-N1pelP'; // Settings > API > Project API keys > anon public
+const AUTH_EMAIL = 'zeroquality505@gmail.com';              // the email of the auth user you create in Supabase
+
+const SUPABASE_CONFIGURED = !SUPABASE_URL.includes('YOUR_') && !SUPABASE_ANON_KEY.includes('YOUR_') && !AUTH_EMAIL.includes('YOUR_');
+const supabaseClient = SUPABASE_CONFIGURED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+const KEY_UNLOCK_UNTIL = 'toolbox_unlock_until';
+const UNLOCK_DAYS = 30;
+
+function isUnlockedLocally(){
+  const until = parseInt(localStorage.getItem(KEY_UNLOCK_UNTIL) || '0', 10);
+  return until > Date.now();
+}
+function extendUnlock(){
+  localStorage.setItem(KEY_UNLOCK_UNTIL, String(Date.now() + UNLOCK_DAYS*24*60*60*1000));
+}
+
+const lockOverlay = document.getElementById('lockOverlay');
+const lockForm = document.getElementById('lockForm');
+const lockInput = document.getElementById('lockPinInput');
+const lockError = document.getElementById('lockError');
+const lockSubmit = document.getElementById('lockSubmit');
+
+function showLock(){
+  lockOverlay.classList.add('visible');
+  setTimeout(()=>{ if(lockInput) lockInput.focus(); }, 50);
+}
+function hideLock(){
+  lockOverlay.classList.remove('visible');
+}
+
+async function tryAutoUnlock(){
+  if(!SUPABASE_CONFIGURED){ hideLock(); return; } // not set up yet — run unlocked, local-only
+  if(!isUnlockedLocally()){ showLock(); return; }
+  try{
+    const { data } = await supabaseClient.auth.getSession();
+    if(data && data.session){
+      hideLock();
+      if(window.__toolboxOnUnlock) window.__toolboxOnUnlock();
+    } else {
+      showLock();
+    }
+  }catch(e){
+    showLock();
+  }
+}
+
+if(lockForm){
+  lockForm.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    lockError.textContent = '';
+    lockSubmit.disabled = true;
+    lockSubmit.textContent = 'Checking…';
+    const pin = lockInput.value.trim();
+    try{
+      const { error } = await supabaseClient.auth.signInWithPassword({ email: AUTH_EMAIL, password: pin });
+      if(error){
+        lockError.textContent = 'Incorrect PIN. Try again.';
+        lockInput.value = '';
+        lockInput.focus();
+      } else {
+        extendUnlock();
+        hideLock();
+        if(window.__toolboxOnUnlock) window.__toolboxOnUnlock();
+      }
+    }catch(err){
+      lockError.textContent = 'Could not reach the server — check your connection.';
+    }
+    lockSubmit.disabled = false;
+    lockSubmit.textContent = 'Unlock';
+  });
+}
+
+tryAutoUnlock();
+
+// ================= Theme picker (light/dark/etc) =================
+(function(){
+  const KEY_THEME = 'toolbox_theme';
+  const btn = document.getElementById('themeBtn');
+  const icon = document.getElementById('themeIconMoon');
+  const modalRoot = document.getElementById('modalRoot');
+  const sunPath = '<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4.5"/>';
+  const moonPath = '<path d="M21 12.6A9 9 0 1 1 11.4 3a7 7 0 0 0 9.6 9.6Z"/>';
+
+  const THEMES = [
+    { id:'light',      name:'Light',      dark:false, bg:'#E4E9F2', accent:'#2F6E68' },
+    { id:'dark',       name:'Midnight',   dark:true,  bg:'#1A1D26', accent:'#4FB3A6' },
+    { id:'ocean',      name:'Ocean',      dark:false, bg:'#E3EEF5', accent:'#1F7A8C' },
+    { id:'forest',     name:'Forest',     dark:false, bg:'#E6EDE3', accent:'#3F7D51' },
+    { id:'sunset',     name:'Sunset',     dark:false, bg:'#F3E7DE', accent:'#D97A4D' },
+    { id:'nightshade', name:'Nightshade', dark:true,  bg:'#1B1726', accent:'#9B6BD1' }
+  ];
+  function themeInfo(id){ return THEMES.find(t=>t.id===id) || THEMES[0]; }
+
+  let theme = 'light';
+  function apply(id){
+    theme = id;
+    document.documentElement.setAttribute('data-theme', id);
+    const t = themeInfo(id);
+    icon.innerHTML = t.dark ? sunPath : moonPath;
+    btn.title = 'Choose theme (currently ' + t.name + ')';
+  }
+
+  try{
+    const saved = localStorage.getItem(KEY_THEME);
+    theme = (saved && THEMES.some(t=>t.id===saved)) ? saved :
+      ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light');
+  }catch(e){}
+  apply(theme);
+
+  const checkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
+  function openThemeModal(){
+    modalRoot.innerHTML = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    const cells = THEMES.map(t => `
+      <div class="theme-cell">
+        <button class="theme-swatch${t.id===theme?' active':''}" data-theme-id="${t.id}" style="background:${t.bg};" title="${t.name}">
+          <span class="theme-swatch-dot" style="background:${t.accent};"></span>
+          ${t.id===theme ? `<span class="theme-swatch-check">${checkSvg}</span>` : ''}
+        </button>
+        <span class="theme-name">${t.name}</span>
+      </div>`).join('');
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>Choose a theme</h3>
+        <div class="theme-grid">${cells}</div>
+        <div class="modal-actions">
+          <button class="cancel" id="mCancel">Close</button>
+        </div>
+      </div>`;
+    modalRoot.appendChild(overlay);
+    overlay.querySelectorAll('.theme-swatch').forEach(elBtn=>{
+      elBtn.addEventListener('click', ()=>{
+        apply(elBtn.dataset.themeId);
+        try{ localStorage.setItem(KEY_THEME, theme); }catch(e){}
+        modalRoot.innerHTML = '';
+      });
+    });
+    document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+  }
+
+  btn.addEventListener('click', openThemeModal);
+})();
+
+(function(){
+  const inputArea = document.getElementById('inputArea');
+  const highlightInner = document.getElementById('highlightInner');
+  const validCountEl = document.getElementById('validCount');
+  const errorCountEl = document.getElementById('errorCount');
+  const totalCountEl = document.getElementById('totalCount');
+  const errorNav = document.getElementById('errorNav');
+  const errorInfo = document.getElementById('errorInfo');
+  const errorListEl = document.getElementById('errorList');
+  const prevErrBtn = document.getElementById('prevErrBtn');
+  const nextErrBtn = document.getElementById('nextErrBtn');
+  const autoJumpSwitch = document.getElementById('autoJumpSwitch');
+  const toastEl = document.getElementById('toast');
+
+  let autoJump = true;
+  let matches = [];       // all digit-runs found
+  let errors = [];        // subset that are not exactly 2 digits
+  let currentErrorIdx = -1;
+  let lastErrorCount = 0;
+  let debounceTimer = null;
+
+  function escapeHtml(s){
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function analyze(text){
+    const re = /\d+/g;
+    const found = [];
+    let m;
+    while((m = re.exec(text)) !== null){
+      found.push({start:m.index, end:m.index+m[0].length, text:m[0], valid:m[0].length===2});
+    }
+    return found;
+  }
+
+  function buildHighlightHTML(text, found, currentErr){
+    let html = '';
+    let last = 0;
+    found.forEach(m=>{
+      html += escapeHtml(text.slice(last, m.start));
+      const cls = m.valid ? 'num-valid' : ('num-error' + (m===currentErr ? ' current' : ''));
+      html += '<span class="'+cls+'">'+escapeHtml(m.text)+'</span>';
+      last = m.end;
+    });
+    html += escapeHtml(text.slice(last));
+    if(text.endsWith('\n')) html += '&nbsp;';
+    return html;
+  }
+
+  function renderErrorList(){
+    errorListEl.innerHTML = '';
+    errors.forEach((e, i)=>{
+      const chip = document.createElement('button');
+      chip.className = 'error-chip';
+      chip.textContent = '"'+e.text+'" ('+e.text.length+' digit'+(e.text.length===1?'':'s')+')';
+      chip.addEventListener('click', ()=> jumpToError(i, true));
+      errorListEl.appendChild(chip);
+    });
+  }
+
+  function updateStats(){
+    const validList = matches.filter(m=>m.valid);
+    validCountEl.textContent = validList.length;
+    errorCountEl.textContent = errors.length;
+    totalCountEl.textContent = matches.length;
+    errorNav.style.display = errors.length ? 'flex' : 'none';
+    if(errors.length){
+      if(currentErrorIdx < 0 || currentErrorIdx >= errors.length) currentErrorIdx = 0;
+      errorInfo.textContent = 'Error '+(currentErrorIdx+1)+' of '+errors.length;
+    } else {
+      currentErrorIdx = -1;
+    }
+    renderErrorList();
+  }
+
+  function syncScroll(){
+    highlightInner.style.transform = 'translate('+(-inputArea.scrollLeft)+'px,'+(-inputArea.scrollTop)+'px)';
+  }
+
+  function render(jumpNow){
+    const text = inputArea.value;
+    matches = analyze(text);
+    errors = matches.filter(m=>!m.valid);
+    const currentErr = (currentErrorIdx>=0 && errors[currentErrorIdx]) ? errors[currentErrorIdx] : null;
+    highlightInner.innerHTML = buildHighlightHTML(text, matches, currentErr);
+    syncScroll();
+    updateStats();
+  }
+
+  function scrollTextareaToPosition(pos){
+    const before = inputArea.value.slice(0, pos);
+    const lineNum = before.split('\n').length - 1;
+    const cs = getComputedStyle(inputArea);
+    const lineHeight = parseFloat(cs.lineHeight) || 24;
+    const target = lineNum*lineHeight - inputArea.clientHeight/2 + lineHeight;
+    inputArea.scrollTop = Math.max(0, target);
+    syncScroll();
+  }
+
+  function jumpToError(idx, userInitiated){
+    if(!errors.length) return;
+    currentErrorIdx = ((idx % errors.length) + errors.length) % errors.length;
+    const e = errors[currentErrorIdx];
+    if(userInitiated){
+      // Only move the real cursor/selection when the user explicitly asked
+      // to jump (Prev/Next or tapping an error chip). Doing this automatically
+      // while the user is still typing/deleting steals the caret to a
+      // different spot in the text, so their next backspace deletes the
+      // wrong characters. Automatic detection below only highlights + scrolls.
+      inputArea.focus();
+      inputArea.setSelectionRange(e.start, e.end);
+    }
+    scrollTextareaToPosition(e.start);
+    errorInfo.textContent = 'Error '+(currentErrorIdx+1)+' of '+errors.length;
+    highlightInner.innerHTML = buildHighlightHTML(inputArea.value, matches, e);
+    if(userInitiated) showToast('Jumped to "'+e.text+'"');
+  }
+
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=> toastEl.classList.remove('show'), 1600);
+  }
+
+  inputArea.addEventListener('input', ()=>{
+    render(false);
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(()=>{
+      if(autoJump && errors.length && errors.length !== lastErrorCount){
+        jumpToError(0, false);
+        showToast(errors.length===1 ? '1 number needs 2 digits' : errors.length+' numbers need 2 digits');
+      }
+      lastErrorCount = errors.length;
+    }, 700);
+  });
+  inputArea.addEventListener('scroll', syncScroll);
+  window.addEventListener('resize', syncScroll);
+
+  prevErrBtn.addEventListener('click', ()=> jumpToError(currentErrorIdx-1, true));
+  nextErrBtn.addEventListener('click', ()=> jumpToError(currentErrorIdx+1, true));
+
+  autoJumpSwitch.addEventListener('click', ()=>{
+    autoJump = !autoJump;
+    autoJumpSwitch.classList.toggle('on', autoJump);
+  });
+
+  document.getElementById('pasteBtn').addEventListener('click', async ()=>{
+    try{
+      const text = await navigator.clipboard.readText();
+      const start = inputArea.selectionStart, end = inputArea.selectionEnd;
+      inputArea.value = inputArea.value.slice(0,start) + text + inputArea.value.slice(end);
+      inputArea.focus();
+      inputArea.setSelectionRange(start+text.length, start+text.length);
+      render(false);
+      lastErrorCount = errors.length;
+    }catch(err){
+      showToast('Tap the box and long-press to paste');
+    }
+  });
+
+  document.getElementById('clearInputBtn').addEventListener('click', ()=>{
+    inputArea.value = '';
+    currentErrorIdx = -1;
+    lastErrorCount = 0;
+    render(false);
+    inputArea.focus();
+  });
+
+  document.getElementById('copyStatsBtn').addEventListener('click', async ()=>{
+    const validList = matches.filter(m=>m.valid).map(m=>m.text);
+    const summary = 'Valid: '+validList.length+' | Errors: '+errors.length+' | Total: '+matches.length+
+      (validList.length ? ('\nNumbers: '+validList.join(', ')) : '');
+    try{
+      await navigator.clipboard.writeText(summary);
+      showToast('Result copied');
+    }catch(err){
+      showToast('Could not copy — clipboard blocked');
+    }
+  });
+
+  document.getElementById('infoBtn').addEventListener('click', ()=>{
+    showToast('Numbers must be exactly 2 digits. Any character between them works as a separator.');
+  });
+
+  // ---- drag-to-resize handle ----
+  const resizeHandle = document.getElementById('resizeHandle');
+  const editorWrap = document.querySelector('.editor-wrap');
+  let resizing = false, startY = 0, startHeight = 0;
+  const MIN_H = 120;
+  const maxH = () => window.innerHeight * 0.8;
+
+  resizeHandle.addEventListener('pointerdown', (e)=>{
+    resizing = true;
+    startY = e.clientY;
+    startHeight = editorWrap.getBoundingClientRect().height;
+    resizeHandle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  resizeHandle.addEventListener('pointermove', (e)=>{
+    if(!resizing) return;
+    const delta = e.clientY - startY;
+    const newHeight = Math.max(MIN_H, Math.min(maxH(), startHeight + delta));
+    editorWrap.style.height = newHeight + 'px';
+    syncScroll();
+  });
+  function endResize(){ resizing = false; }
+  resizeHandle.addEventListener('pointerup', endResize);
+  resizeHandle.addEventListener('pointercancel', endResize);
+
+  render(false);
+})();
+
+// ================= Tab switching (+ true infinite-direction swipe) =================
+(function(){
+  const tabs = document.querySelectorAll('.tab[data-tool]');
+  const panelEls = { calclog: document.getElementById('calcPanel'), numbers: document.getElementById('numbersPanel') };
+  const swipeArea = document.getElementById('swipeArea');
+  const track = document.getElementById('swipeTrack');
+  const slotLeft = document.getElementById('slotLeft');
+  const slotRight = document.getElementById('slotRight');
+
+  let current = 'calclog';
+  const other = (k)=> k==='calclog' ? 'numbers' : 'calclog';
+
+  function show(el){ el.style.display = 'block'; }
+
+  // Canonical resting state: `current` lives in slotLeft, its counterpart in slotRight, track at x=0.
+  function ensureCanonical(){
+    if(slotLeft.firstElementChild !== panelEls[current]){ slotLeft.appendChild(panelEls[current]); show(panelEls[current]); }
+    if(slotRight.firstElementChild !== panelEls[other(current)]){ slotRight.appendChild(panelEls[other(current)]); show(panelEls[other(current)]); }
+    track.style.transition = 'none';
+    track.style.transform = 'translate3d(0,0,0)';
+  }
+
+  function width(){ return swipeArea.clientWidth || 1; }
+
+  function setHeightTo(panelKey, animate){
+    const h = panelEls[panelKey].scrollHeight;
+    swipeArea.style.transition = animate ? 'height .32s cubic-bezier(.22,.61,.36,1)' : 'none';
+    swipeArea.style.height = h + 'px';
+  }
+  window.__toolboxRefreshSwipeHeight = ()=> setHeightTo(current, false);
+
+  function afterShow(){
+    tabs.forEach(x=> x.classList.toggle('active', x.dataset.tool===current));
+    setHeightTo(current, true);
+    document.dispatchEvent(new CustomEvent('toolbox:tabshown', { detail:{ tool: current } }));
+  }
+
+  function animateTrack(toPx, onDone){
+    track.style.transition = 'transform .32s cubic-bezier(.22,.61,.36,1)';
+    requestAnimationFrame(()=>{ track.style.transform = 'translate3d(' + toPx + 'px,0,0)'; });
+    let done = false;
+    const finish = ()=>{
+      if(done) return; done = true;
+      track.removeEventListener('transitionend', finish);
+      onDone();
+    };
+    track.addEventListener('transitionend', finish, { once:true });
+    setTimeout(finish, 420); // safety fallback if transitionend doesn't fire
+  }
+
+  // dir: 'left' (reveal next, entering from the right) or 'right' (reveal next, entering from the left)
+  function prepFor(dir){
+    if(dir === 'left'){
+      // canonical layout already has `other` sitting in slotRight — nothing to move
+      track.style.transition = 'none';
+      track.style.transform = 'translate3d(0,0,0)';
+    } else {
+      // swap so `other` sits to the left, `current` shifts right, then jump baseline to match (no visible change)
+      slotLeft.appendChild(panelEls[other(current)]); show(panelEls[other(current)]);
+      slotRight.appendChild(panelEls[current]); show(panelEls[current]);
+      track.style.transition = 'none';
+      track.style.transform = 'translate3d(' + (-width()) + 'px,0,0)';
+    }
+  }
+
+  function commit(dir){
+    if(dir === 'left'){
+      animateTrack(-width(), ()=>{ current = other(current); ensureCanonical(); afterShow(); });
+    } else {
+      animateTrack(0, ()=>{ current = other(current); /* already canonical: new current sits in slotLeft */ afterShow(); });
+    }
+  }
+
+  function cancel(dir){
+    if(dir === 'left'){
+      animateTrack(0, ()=>{ /* still canonical, nothing to undo */ });
+    } else {
+      animateTrack(-width(), ()=>{ ensureCanonical(); });
+    }
+  }
+
+  function goTo(tool){
+    if(tool === current) return;
+    const dir = current === 'calclog' ? 'left' : 'right'; // calclog is visually left of numbers
+    prepFor(dir);
+    commit(dir);
+  }
+
+  tabs.forEach(t=>{
+    t.addEventListener('click', ()=> goTo(t.dataset.tool));
+  });
+
+  // keep dimensions correct as content or window size changes
+  const ro = new ResizeObserver(()=>{ if(!dragging) setHeightTo(current, false); });
+  Object.values(panelEls).forEach(p=> ro.observe(p));
+  window.addEventListener('resize', ()=> ensureCanonical());
+
+  // ---- live-follow swipe, direction always matches the finger, true infinite loop ----
+  let sx=0, sy=0, dragging=false, decided=false, isHorizontal=false, dragDir=null;
+  const THRESH_DECIDE = 8;
+  const THRESH_COMMIT = 0.22;
+
+  function excluded(target){
+    return !!target.closest('.resize-handle, .tile-resize, .btn-tile.editing, .header-tile.editing, textarea, .friend-add, select, .calc-display-wrap, input[type="date"]');
+  }
+
+  swipeArea.addEventListener('pointerdown', (e)=>{
+    if(e.pointerType==='mouse') return;
+    if(excluded(e.target)) return;
+    dragging = true; decided = false; isHorizontal = false; dragDir = null;
+    sx = e.clientX; sy = e.clientY;
+  });
+  swipeArea.addEventListener('pointermove', (e)=>{
+    if(!dragging) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if(!decided){
+      if(Math.abs(dx) < THRESH_DECIDE && Math.abs(dy) < THRESH_DECIDE) return;
+      decided = true;
+      isHorizontal = Math.abs(dx) > Math.abs(dy) * 1.2;
+      if(!isHorizontal){ dragging = false; return; }
+      dragDir = dx < 0 ? 'left' : 'right';
+      prepFor(dragDir);
+    }
+    if(isHorizontal){
+      const w = width();
+      const baseline = dragDir === 'left' ? 0 : -w;
+      const px = Math.max(-w, Math.min(0, baseline + dx));
+      track.style.transition = 'none';
+      track.style.transform = 'translate3d(' + px + 'px,0,0)';
+      e.preventDefault();
+    }
+  });
+  function endTrack(e){
+    if(!dragging) return;
+    dragging = false;
+    if(!isHorizontal || !dragDir) return;
+    const dx = (e.clientX ?? sx) - sx;
+    const w = width();
+    const moved = Math.abs(dx);
+    const committed = moved > w * THRESH_COMMIT || moved > 60;
+    if(committed) commit(dragDir); else cancel(dragDir);
+  }
+  swipeArea.addEventListener('pointerup', endTrack);
+  swipeArea.addEventListener('pointercancel', endTrack);
+
+  ensureCanonical();
+  afterShow();
+})();
+
+// ================= Calc Log tab =================
+(function(){
+  const KEY_FRIENDS = 'toolbox_calc_friends';
+  const KEY_ENTRIES = 'toolbox_calc_entries';
+  const KEY_LAYOUT  = 'toolbox_calc_layout';
+  const KEY_DISPLAY_H = 'toolbox_calc_display_h';
+  const KEY_LABELS = 'toolbox_calc_labels';
+  const defaultLabels = { loggingFor:'Logging for', entryDate:'Entry date', editLayout:'Edit Layout' };
+  let customLabels = Object.assign({}, defaultLabels, load(KEY_LABELS, {}));
+  const COLS = 4, GAP = 8;
+
+  function load(key, fallback){
+    try{ const v = JSON.parse(localStorage.getItem(key)); return v==null?fallback:v; }catch(e){ return fallback; }
+  }
+  function save(key, val){
+    try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+    if(key===KEY_FRIENDS || key===KEY_ENTRIES || key===KEY_LAYOUT || key===KEY_HEADER_LAYOUT || key===KEY_LABELS){
+      scheduleSync();
+    }
+  }
+
+  let friends = load(KEY_FRIENDS, []);
+  let activeFriend = friends[0] || null;
+  let entries = load(KEY_ENTRIES, []);
+  let editMode = false;
+  let friendEditMode = false;
+  const CORE_IDS = ['bs','clr','logsum','logpass'];
+
+  const defaultLayout = [
+    {id:'d7',x:0,y:0,w:1,h:1,action:'digit',value:'7',label:'7'},
+    {id:'d8',x:1,y:0,w:1,h:1,action:'digit',value:'8',label:'8'},
+    {id:'d9',x:2,y:0,w:1,h:1,action:'digit',value:'9',label:'9'},
+    {id:'bs',x:3,y:0,w:1,h:1,action:'backspace',value:'',label:'⌫'},
+    {id:'d4',x:0,y:1,w:1,h:1,action:'digit',value:'4',label:'4'},
+    {id:'d5',x:1,y:1,w:1,h:1,action:'digit',value:'5',label:'5'},
+    {id:'d6',x:2,y:1,w:1,h:1,action:'digit',value:'6',label:'6'},
+    {id:'div',x:3,y:1,w:1,h:1,action:'op',value:'÷',label:'÷'},
+    {id:'d1',x:0,y:2,w:1,h:1,action:'digit',value:'1',label:'1'},
+    {id:'d2',x:1,y:2,w:1,h:1,action:'digit',value:'2',label:'2'},
+    {id:'d3',x:2,y:2,w:1,h:1,action:'digit',value:'3',label:'3'},
+    {id:'mul',x:3,y:2,w:1,h:1,action:'op',value:'×',label:'×'},
+    {id:'lp',x:0,y:3,w:1,h:1,action:'op',value:'(',label:'('},
+    {id:'rp',x:1,y:3,w:1,h:1,action:'op',value:')',label:')'},
+    {id:'dot',x:2,y:3,w:1,h:1,action:'dot',value:'.',label:'.'},
+    {id:'sub',x:3,y:3,w:1,h:1,action:'op',value:'−',label:'−'},
+    {id:'d0',x:0,y:4,w:2,h:1,action:'digit',value:'0',label:'0'},
+    {id:'clr',x:2,y:4,w:1,h:1,action:'clear',value:'',label:'C'},
+    {id:'add',x:3,y:4,w:1,h:1,action:'op',value:'+',label:'+'},
+    {id:'logpass',x:0,y:5,w:2,h:1,action:'logPass',value:'',label:'Log Pass'},
+    {id:'logsum',x:2,y:5,w:2,h:1,action:'logSum',value:'',label:'Log Sum'}
+  ];
+  let layout = load(KEY_LAYOUT, null) || JSON.parse(JSON.stringify(defaultLayout));
+
+  // ---- freeform header widgets (friends / manage / logging label / edit layout / entry date) ----
+  const KEY_HEADER_LAYOUT = 'toolbox_calc_header_layout';
+  const HEADER_COLS = 4, HEADER_ROW = 46;
+  function defaultHeaderLayout(){
+    return [
+      {id:'friends',      x:0, y:0, w:3, h:2},
+      {id:'manage',       x:3, y:0, w:1, h:1},
+      {id:'loggingLabel', x:0, y:2, w:2, h:1},
+      {id:'layoutBtns',   x:2, y:2, w:2, h:1},
+      {id:'entryDate',    x:0, y:3, w:4, h:1}
+    ];
+  }
+  let headerLayout = load(KEY_HEADER_LAYOUT, null) || defaultHeaderLayout();
+  let headerEditMode = false;
+  const headerGrid = document.getElementById('headerGrid');
+  const rearrangeHeaderBtn = document.getElementById('rearrangeHeaderBtn');
+  const rearrangeHeaderLabel = document.getElementById('rearrangeHeaderLabel');
+  const resetHeaderBtn = document.getElementById('resetHeaderBtn');
+  // cache these while they still live inside #widgetTemplates, so we can move (not clone) them
+  // into freeform tiles without losing any of their listeners
+  const widgetBodies = {
+    friends:      document.getElementById('widgetFriends'),
+    manage:       document.getElementById('widgetManage'),
+    loggingLabel: document.getElementById('widgetLoggingLabel'),
+    layoutBtns:   document.getElementById('widgetLayoutBtns'),
+    entryDate:    document.getElementById('widgetEntryDate')
+  };
+
+  const friendRow = document.getElementById('friendRow');
+  const editFriendsBtn = document.getElementById('editFriendsBtn');
+  const activeFriendLabel = document.getElementById('activeFriendLabel');
+  const editLayoutBtn = document.getElementById('editLayoutBtn');
+  const restoreBtn = document.getElementById('restoreBtn');
+  const calcDisplay = document.getElementById('calcDisplay');
+  const calcPreview = document.getElementById('calcPreview');
+  const calcMirror = document.getElementById('calcMirror');
+  const calcMirrorText = document.getElementById('calcMirrorText');
+  const calcCursor = document.getElementById('calcCursor');
+  const btnGrid = document.getElementById('btnGrid');
+  const historyWrap = document.getElementById('historyWrap');
+  const historyFilterEl = document.getElementById('historyFilter');
+  let historyFilter = 'all';
+  const modalRoot = document.getElementById('modalRoot');
+  const toastEl = document.getElementById('toast');
+  const backupBtn = document.getElementById('backupBtn');
+
+  // ---------- cloud sync (Supabase) ----------
+  const saveStatusEl = document.getElementById('saveStatus');
+  const KEY_LOCAL_UPDATED = 'toolbox_local_updated';
+  let syncTimer = null;
+  let pendingSync = false;
+
+  function setSyncStatus(state){
+    if(!saveStatusEl) return;
+    if(!SUPABASE_CONFIGURED){ saveStatusEl.style.display = 'none'; return; }
+    saveStatusEl.style.display = 'flex';
+    saveStatusEl.classList.remove('is-saving','is-saved','is-offline','is-error');
+    if(state==='saving'){ saveStatusEl.classList.add('is-saving'); saveStatusEl.textContent = 'Saving…'; }
+    else if(state==='saved'){ saveStatusEl.classList.add('is-saved'); const t = new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}); saveStatusEl.textContent = 'Saved ✓ ' + t; }
+    else if(state==='offline'){ saveStatusEl.classList.add('is-offline'); saveStatusEl.textContent = 'Offline — will sync'; }
+    else if(state==='error'){ saveStatusEl.classList.add('is-error'); saveStatusEl.textContent = 'Sync failed — will retry'; }
+  }
+
+  function scheduleSync(){
+    if(!SUPABASE_CONFIGURED) return;
+    pendingSync = true;
+    setSyncStatus('saving');
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(performSync, 800);
+  }
+
+  async function performSync(){
+    if(!SUPABASE_CONFIGURED) return;
+    if(!navigator.onLine){ setSyncStatus('offline'); return; }
+    try{
+      const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
+      if(userErr || !userData || !userData.user){ setSyncStatus('offline'); return; }
+      const uid = userData.user.id;
+      const payload = { friends, entries, layout, headerLayout, customLabels };
+      const nowIso = new Date().toISOString();
+      const { error } = await supabaseClient.from('toolbox_state').upsert(
+        { user_id: uid, payload, updated_at: nowIso },
+        { onConflict: 'user_id' }
+      );
+      if(error){ setSyncStatus('error'); return; }
+      localStorage.setItem(KEY_LOCAL_UPDATED, nowIso);
+      pendingSync = false;
+      setSyncStatus('saved');
+    }catch(e){
+      setSyncStatus('offline');
+    }
+  }
+
+  window.addEventListener('online', ()=>{ if(pendingSync) performSync(); });
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='hidden' && pendingSync){ clearTimeout(syncTimer); performSync(); }
+  });
+
+  async function pullAndReconcile(){
+    if(!SUPABASE_CONFIGURED) return;
+    setSyncStatus('saving');
+    try{
+      const { data: userData } = await supabaseClient.auth.getUser();
+      if(!userData || !userData.user) return;
+      const uid = userData.user.id;
+      const { data: row } = await supabaseClient.from('toolbox_state').select('*').eq('user_id', uid).maybeSingle();
+      const localUpdated = localStorage.getItem(KEY_LOCAL_UPDATED);
+      if(row && row.updated_at && (!localUpdated || new Date(row.updated_at) > new Date(localUpdated))){
+        const p = row.payload || {};
+        friends = Array.isArray(p.friends) ? p.friends : friends;
+        entries = Array.isArray(p.entries) ? p.entries : entries;
+        if(Array.isArray(p.layout) && p.layout.length) layout = p.layout;
+        if(Array.isArray(p.headerLayout) && p.headerLayout.length) headerLayout = p.headerLayout;
+        if(p.customLabels && typeof p.customLabels==='object') customLabels = Object.assign({}, defaultLabels, p.customLabels);
+        save(KEY_FRIENDS, friends); save(KEY_ENTRIES, entries); save(KEY_LAYOUT, layout);
+        save(KEY_HEADER_LAYOUT, headerLayout); save(KEY_LABELS, customLabels);
+        localStorage.setItem(KEY_LOCAL_UPDATED, row.updated_at);
+        activeFriend = friends[0] || null;
+        applyLabels(); renderFriends(); updateActiveLabel(); renderGrid(); renderHeaderGrid(); renderHistory(); updatePreview();
+        setSyncStatus('saved');
+      } else {
+        await performSync();
+      }
+    }catch(e){
+      setSyncStatus('offline');
+    }
+  }
+  window.__toolboxOnUnlock = pullAndReconcile;
+  setSyncStatus(SUPABASE_CONFIGURED ? 'saved' : null);
+
+  function showToast(msg, actionLabel, onAction){
+    toastEl.classList.remove('dragging');
+    toastEl.style.transform = '';
+    toastEl.style.opacity = '';
+    toastEl.innerHTML = '';
+    const span = document.createElement('span');
+    span.textContent = msg;
+    toastEl.appendChild(span);
+    if(actionLabel && onAction){
+      const btn = document.createElement('button');
+      btn.className = 'toast-action';
+      btn.textContent = actionLabel;
+      btn.addEventListener('click', ()=>{
+        onAction();
+        toastEl.classList.remove('show');
+        clearTimeout(showToast._t);
+      });
+      toastEl.appendChild(btn);
+    }
+    toastEl.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=> toastEl.classList.remove('show'), actionLabel ? 4500 : 1800);
+  }
+
+  // ---- swipe-to-dismiss on the toast (either direction), Android-notification style ----
+  (function(){
+    let dragging = false, startX = 0, dx = 0, toastW = 0;
+    const DISMISS_RATIO = 0.35; // fraction of toast width needed to dismiss
+
+    toastEl.addEventListener('pointerdown', (e)=>{
+      if(!toastEl.classList.contains('show')) return;
+      if(e.target.closest('.toast-action')) return; // let the action button handle its own tap
+      dragging = true;
+      startX = e.clientX;
+      dx = 0;
+      toastW = toastEl.offsetWidth || 1;
+      toastEl.classList.add('dragging');
+      toastEl.setPointerCapture(e.pointerId);
+    });
+
+    toastEl.addEventListener('pointermove', (e)=>{
+      if(!dragging) return;
+      dx = e.clientX - startX;
+      toastEl.style.transform = `translateX(calc(-50% + ${dx}px)) translateY(0)`;
+      toastEl.style.opacity = String(Math.max(0.15, 1 - Math.abs(dx) / toastW));
+    });
+
+    function endDrag(e){
+      if(!dragging) return;
+      dragging = false;
+      toastEl.classList.remove('dragging');
+      const shouldDismiss = Math.abs(dx) > toastW * DISMISS_RATIO;
+      if(shouldDismiss){
+        const flyTo = dx > 0 ? toastW * 1.2 : -toastW * 1.2;
+        toastEl.style.transform = `translateX(calc(-50% + ${flyTo}px)) translateY(0)`;
+        toastEl.style.opacity = '0';
+        clearTimeout(showToast._t);
+        setTimeout(()=>{
+          toastEl.classList.remove('show');
+          toastEl.style.transform = '';
+          toastEl.style.opacity = '';
+        }, 200);
+      } else {
+        toastEl.style.transform = '';
+        toastEl.style.opacity = '';
+      }
+      dx = 0;
+    }
+
+    toastEl.addEventListener('pointerup', endDrag);
+    toastEl.addEventListener('pointercancel', endDrag);
+  })();
+
+  // ---------- expression evaluator (safe, no eval) ----------
+  function evaluate(raw){
+    let s = raw.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-');
+    s = s.replace(/[,;\s]+/g, '+');   // treat separators (commas, spaces, newlines) as addition
+    s = s.replace(/\++/g, '+').replace(/\+-/g, '-').replace(/^\+/, '');
+    if(!s.trim()) throw new Error('empty');
+    let i = 0;
+    function peek(){ return s[i]; }
+    function parseExpr(){
+      let v = parseTerm();
+      while(peek()==='+' || peek()==='-'){
+        const op = s[i++]; const rhs = parseTerm();
+        v = op==='+' ? v+rhs : v-rhs;
+      }
+      return v;
+    }
+    function parseTerm(){
+      let v = parseFactor();
+      while(peek()==='*' || peek()==='/'){
+        const op = s[i++]; const rhs = parseFactor();
+        v = op==='*' ? v*rhs : v/rhs;
+      }
+      return v;
+    }
+    function parseFactor(){
+      if(peek()==='+'){ i++; return parseFactor(); }
+      if(peek()==='-'){ i++; return -parseFactor(); }
+      if(peek()==='('){
+        i++; const v = parseExpr();
+        if(peek()===')') i++;
+        return v;
+      }
+      let start = i;
+      while(i<s.length && /[0-9.]/.test(s[i])) i++;
+      if(start===i) throw new Error('bad token near '+s.slice(i));
+      return parseFloat(s.slice(start,i));
+    }
+    const result = parseExpr();
+    if(i < s.length) throw new Error('trailing input');
+    if(!isFinite(result)) throw new Error('not finite');
+    return result;
+  }
+
+  function updatePreview(){
+    syncMirror();
+    const raw = calcDisplay.value;
+    if(!raw.trim()){ calcPreview.innerHTML='&nbsp;'; calcPreview.classList.remove('err'); return; }
+    try{
+      const v = evaluate(raw);
+      calcPreview.textContent = '= ' + round2(v);
+      calcPreview.classList.remove('err');
+      return;
+    }catch(e){}
+    // incomplete expression (e.g. trailing operator) — show the result up to the last complete point,
+    // the way a real calculator keeps showing its running total while you type the next step
+    let s = raw;
+    while(s.length){
+      s = s.slice(0, -1);
+      if(!s.trim()) break;
+      try{
+        const v = evaluate(s);
+        calcPreview.textContent = '= ' + round2(v);
+        calcPreview.classList.remove('err');
+        return;
+      }catch(e2){ /* keep trimming */ }
+    }
+    calcPreview.innerHTML = '&nbsp;';
+    calcPreview.classList.remove('err');
+  }
+  function round2(n){ return Math.round(n*100)/100; }
+  function netInfo(sum, pass){
+    const diff = round2(sum - pass);
+    const cls = diff > 0 ? 'net-pos' : (diff < 0 ? 'net-neg' : 'net-zero');
+    const txt = diff > 0 ? ('+' + diff) : String(diff);
+    return { cls, txt };
+  }
+
+  // ---------- custom cursor (mirror-based; keeps the real textarea readonly/inert so the keyboard never pops) ----------
+  function syncMirror(){
+    const val = calcDisplay.value;
+    calcMirrorText.textContent = val.length ? val : '\u200b';
+    positionCursor();
+  }
+  function positionCursor(){
+    const val = calcDisplay.value;
+    const textNode = calcMirrorText.firstChild;
+    if(!textNode){ calcCursor.style.display = 'none'; return; }
+    const idx = val.length ? Math.max(0, Math.min(calcDisplay.selectionStart ?? val.length, textNode.length)) : 0;
+    const range = document.createRange();
+    range.setStart(textNode, idx);
+    range.setEnd(textNode, idx);
+    const rects = range.getClientRects();
+    const rect = rects[0] || range.getBoundingClientRect();
+    const wrapRect = calcMirror.getBoundingClientRect();
+    calcCursor.style.left = (rect.left - wrapRect.left + calcMirror.scrollLeft) + 'px';
+    calcCursor.style.top = (rect.top - wrapRect.top + calcMirror.scrollTop) + 'px';
+    if(rect.height) calcCursor.style.height = rect.height + 'px';
+    calcCursor.style.display = 'block';
+  }
+  function tapToIndex(clientX, clientY){
+    const val = calcDisplay.value;
+    if(!val.length) return 0;
+    let node = null, offset = 0;
+    if(document.caretRangeFromPoint){
+      const r = document.caretRangeFromPoint(clientX, clientY);
+      if(r){ node = r.startContainer; offset = r.startOffset; }
+    } else if(document.caretPositionFromPoint){
+      const p = document.caretPositionFromPoint(clientX, clientY);
+      if(p){ node = p.offsetNode; offset = p.offset; }
+    }
+    if(node === calcMirrorText.firstChild) return Math.max(0, Math.min(offset, val.length));
+    if(node === calcMirrorText) return offset > 0 ? val.length : 0;
+    return val.length; // tapped outside recognizable text (e.g. blank space below wrapped lines) — default to end
+  }
+  calcMirror.addEventListener('pointerdown', (e)=>{
+    if(e.pointerType==='mouse' && e.button!==0) return;
+    const idx = tapToIndex(e.clientX, e.clientY);
+    calcDisplay.setSelectionRange(idx, idx);
+    calcDisplay.focus({ preventScroll:true });
+    positionCursor();
+    e.preventDefault();
+  });
+  calcMirror.addEventListener('scroll', positionCursor);
+  window.addEventListener('resize', positionCursor);
+
+  calcDisplay.addEventListener('input', updatePreview);
+
+  const OP_CHARS = ['+','−','×','÷'];
+  function insertAtCursor(text){
+    const start = calcDisplay.selectionStart ?? calcDisplay.value.length;
+    const end = calcDisplay.selectionEnd ?? calcDisplay.value.length;
+    if(OP_CHARS.includes(text) && start === end){
+      const lastChar = calcDisplay.value.slice(0, start).slice(-1);
+      if(OP_CHARS.includes(lastChar)){
+        if(lastChar === text) return; // same operator already there — do nothing
+        calcDisplay.setRangeText(text, start-1, start, 'end'); // different operator — replace it
+        calcDisplay.focus();
+        updatePreview();
+        return;
+      }
+    }
+    calcDisplay.setRangeText(text, start, end, 'end');
+    calcDisplay.focus();
+    updatePreview();
+  }
+
+  // ---------- friends ----------
+  function renderFriends(){
+    friendRow.innerHTML = '';
+    friends.forEach(name=>{
+      const wrap = document.createElement('div');
+      wrap.className = 'friend-chip-wrap' + (friendEditMode ? ' editing' : '');
+      const chip = document.createElement('button');
+      chip.className = 'friend-chip' + (name===activeFriend ? ' active' : '');
+      chip.textContent = name;
+      if(friendEditMode){
+        chip.addEventListener('click', ()=> openRenameFriendModal(name));
+      } else {
+        chip.addEventListener('click', ()=>{ activeFriend = name; renderFriends(); updateActiveLabel(); });
+      }
+      wrap.appendChild(chip);
+      if(friendEditMode){
+        const del = document.createElement('div');
+        del.className = 'chip-del';
+        del.textContent = '×';
+        del.title = 'Delete friend';
+        del.addEventListener('click', (e)=>{ e.stopPropagation(); confirmDeleteFriend(name); });
+        wrap.appendChild(del);
+      }
+      friendRow.appendChild(wrap);
+    });
+    if(!friendEditMode){
+      const wrap = document.createElement('div');
+      wrap.className = 'friend-add';
+      wrap.innerHTML = '<input id="newFriendInput" placeholder="Add friend" maxlength="24"><button id="addFriendBtn">+</button>';
+      friendRow.appendChild(wrap);
+      document.getElementById('addFriendBtn').addEventListener('click', addFriend);
+      document.getElementById('newFriendInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addFriend(); });
+    }
+  }
+  function addFriend(){
+    const input = document.getElementById('newFriendInput');
+    const name = input.value.trim();
+    if(!name) return;
+    if(!friends.includes(name)) friends.push(name);
+    activeFriend = name;
+    save(KEY_FRIENDS, friends);
+    renderFriends();
+    updateActiveLabel();
+  }
+  function updateActiveLabel(){
+    if(!activeFriend){ activeFriendLabel.textContent = 'Pick a friend above'; return; }
+    const prefix = customLabels.loggingFor;
+    activeFriendLabel.innerHTML = (prefix ? escapeHtml(prefix)+' ' : '') + '<b>'+escapeHtml(activeFriend)+'</b>';
+  }
+  function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function openRenameFriendModal(oldName){
+    modalRoot.innerHTML = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>Rename friend</h3>
+        <label>New name</label>
+        <input id="mRename" maxlength="24" value="${escapeHtml(oldName)}">
+        <p>Past history keeps showing "${escapeHtml(oldName)}" for entries already logged, so your records stay accurate.</p>
+        <div class="modal-actions">
+          <button class="cancel" id="mCancel">Cancel</button>
+          <button class="confirm" id="mSave">Save</button>
+        </div>
+      </div>`;
+    modalRoot.appendChild(overlay);
+    const input = document.getElementById('mRename');
+    input.focus(); input.select();
+    document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+    document.getElementById('mSave').addEventListener('click', ()=>{
+      const newName = input.value.trim();
+      if(!newName){ modalRoot.innerHTML=''; return; }
+      if(newName!==oldName && friends.includes(newName)){ showToast('That name is already used'); return; }
+      const idx = friends.indexOf(oldName);
+      if(idx>-1) friends[idx] = newName;
+      if(activeFriend===oldName) activeFriend = newName;
+      save(KEY_FRIENDS, friends);
+      modalRoot.innerHTML = '';
+      renderFriends();
+      updateActiveLabel();
+      showToast('Renamed to '+newName);
+    });
+  }
+
+  function confirmDeleteFriend(name){
+    modalRoot.innerHTML = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>Delete "${escapeHtml(name)}"?</h3>
+        <p>They'll be removed from your friend list, but any history already logged for them stays and will still show their name.</p>
+        <div class="modal-actions">
+          <button class="cancel" id="mCancel">Cancel</button>
+          <button class="confirm danger" id="mDel">Delete</button>
+        </div>
+      </div>`;
+    modalRoot.appendChild(overlay);
+    document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+    document.getElementById('mDel').addEventListener('click', ()=>{
+      modalRoot.innerHTML = '';
+      deleteFriend(name);
+    });
+  }
+
+  function deleteFriend(name){
+    const idx = friends.indexOf(name);
+    if(idx<0) return;
+    const wasActive = activeFriend===name;
+    friends.splice(idx, 1);
+    if(wasActive) activeFriend = friends[0] || null;
+    save(KEY_FRIENDS, friends);
+    renderFriends();
+    updateActiveLabel();
+    showToast('Deleted '+name+' — their history is kept', 'Undo', ()=>{
+      friends.splice(idx, 0, name);
+      if(wasActive) activeFriend = name;
+      save(KEY_FRIENDS, friends);
+      renderFriends();
+      updateActiveLabel();
+    });
+  }
+
+  // ---------- customizable labels (rename or blank: "Logging for", "Entry date", "Edit Layout") ----------
+  function applyLabels(){
+    const entryDateEl = document.getElementById('entryDateLabelText');
+    if(entryDateEl){
+      entryDateEl.textContent = customLabels.entryDate;
+      entryDateEl.style.display = customLabels.entryDate ? '' : 'none';
+    }
+    const editLayoutEl = document.getElementById('editLayoutLabelText');
+    if(editLayoutEl){
+      editLayoutEl.textContent = customLabels.editLayout;
+      editLayoutEl.style.display = customLabels.editLayout ? '' : 'none';
+    }
+  }
+  function openLabelsModal(){
+    modalRoot.innerHTML = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>Customize labels</h3>
+        <label>"Logging for" prefix</label>
+        <input id="lblLoggingFor" maxlength="24" value="${escapeHtml(customLabels.loggingFor)}" placeholder="Leave blank to hide">
+        <label>Entry date label</label>
+        <input id="lblEntryDate" maxlength="24" value="${escapeHtml(customLabels.entryDate)}" placeholder="Leave blank to hide">
+        <label>Edit Layout button text</label>
+        <input id="lblEditLayout" maxlength="24" value="${escapeHtml(customLabels.editLayout)}" placeholder="Leave blank to hide">
+        <div class="modal-actions">
+          <button class="cancel" id="mCancel">Cancel</button>
+          <button class="confirm" id="mSave">Save</button>
+        </div>
+      </div>`;
+    modalRoot.appendChild(overlay);
+    document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+    document.getElementById('mSave').addEventListener('click', ()=>{
+      customLabels.loggingFor = document.getElementById('lblLoggingFor').value;
+      customLabels.entryDate = document.getElementById('lblEntryDate').value;
+      customLabels.editLayout = document.getElementById('lblEditLayout').value;
+      save(KEY_LABELS, customLabels);
+      modalRoot.innerHTML = '';
+      applyLabels();
+      updateActiveLabel();
+      showToast('Labels updated');
+    });
+  }
+  document.getElementById('editLabelsBtn').addEventListener('click', openLabelsModal);
+
+  editFriendsBtn.addEventListener('click', ()=>{
+    friendEditMode = !friendEditMode;
+    editFriendsBtn.classList.toggle('on', friendEditMode);
+    document.getElementById('editFriendsLabel').textContent = friendEditMode ? 'Done' : 'Manage';
+    renderFriends();
+  });
+
+  // ---------- button grid (freeform, draggable, resizable) ----------
+  function cellSize(){
+    return Math.max(1, btnGrid.clientWidth / COLS);
+  }
+  function maxRow(){
+    return layout.reduce((m,b)=> Math.max(m, b.y+b.h), 0);
+  }
+  function layoutBtn(el, b, cs){
+    el.style.left = (b.x*cs) + 'px';
+    el.style.top = (b.y*cs) + 'px';
+    el.style.width = (b.w*cs) + 'px';
+    el.style.height = (b.h*cs) + 'px';
+  }
+
+  function renderGrid(){
+    btnGrid.innerHTML = '';
+    const cs = cellSize();
+    let rows = maxRow();
+    layout.forEach(b=>{
+      const el = document.createElement('button');
+      el.className = 'btn-tile' + (b.action==='logSum'||b.action==='logPass' ? ' accent' : '') + (b.action==='op'?' op':'') + (editMode?' editing':'');
+      el.textContent = b.label;
+      layoutBtn(el, b, cs);
+      if(editMode){
+        const del = document.createElement('div');
+        del.className = 'tile-delete';
+        del.textContent = '×';
+        del.addEventListener('pointerdown', ev=> ev.stopPropagation());
+        del.addEventListener('click', ev=>{
+          ev.stopPropagation();
+          layout = layout.filter(x=>x.id!==b.id);
+          save(KEY_LAYOUT, layout);
+          renderGrid();
+        });
+        el.appendChild(del);
+
+        const rs = document.createElement('div');
+        rs.className = 'tile-resize';
+        rs.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="17" cy="17" r="1.6"/><circle cx="17" cy="11" r="1.6"/><circle cx="11" cy="17" r="1.6"/></svg>';
+        el.appendChild(rs);
+        attachResize(rs, el, b);
+        attachMove(el, b, del, rs);
+      } else {
+        el.addEventListener('click', ()=> handleTileClick(b));
+      }
+      btnGrid.appendChild(el);
+    });
+
+    if(editMode){
+      const addEl = document.createElement('button');
+      addEl.className = 'btn-tile add-tile';
+      addEl.textContent = '+';
+      layoutBtn(addEl, {x:0,y:rows,w:1,h:1}, cs);
+      addEl.addEventListener('click', openAddButtonModal);
+      btnGrid.appendChild(addEl);
+      rows += 1;
+    }
+    btnGrid.style.height = (rows*cs) + 'px';
+    updateRestoreVisibility();
+  }
+
+  function missingCoreButtons(){
+    const presentIds = new Set(layout.map(b=>b.id));
+    return defaultLayout.filter(b=> CORE_IDS.includes(b.id) && !presentIds.has(b.id));
+  }
+  function updateRestoreVisibility(){
+    const missing = missingCoreButtons();
+    restoreBtn.style.display = missing.length ? 'flex' : 'none';
+  }
+  function restoreMissingButtons(){
+    const missing = missingCoreButtons();
+    if(!missing.length){ showToast('Nothing missing — all core buttons present'); return; }
+    let row = maxRow();
+    missing.forEach(b=>{
+      layout.push(Object.assign({}, b, {y:row}));
+      row += b.h;
+    });
+    save(KEY_LAYOUT, layout);
+    renderGrid();
+    showToast('Restored '+missing.length+' button'+(missing.length===1?'':'s'));
+  }
+  restoreBtn.addEventListener('click', restoreMissingButtons);
+
+  function handleTileClick(b){
+    if(b.action==='digit' || b.action==='op'){ insertAtCursor(b.value); return; }
+    if(b.action==='dot'){ insertAtCursor('.'); return; }
+    if(b.action==='backspace'){
+      const start = calcDisplay.selectionStart, end = calcDisplay.selectionEnd;
+      if(start===end && start>0) calcDisplay.setRangeText('', start-1, start, 'end');
+      else calcDisplay.setRangeText('', start, end, 'end');
+      calcDisplay.focus(); updatePreview();
+      return;
+    }
+    if(b.action==='clear'){ calcDisplay.value=''; updatePreview(); calcDisplay.focus(); return; }
+    if(b.action==='custom'){ insertAtCursor(b.value); return; }
+    if(b.action==='logSum') return logEntry('sum');
+    if(b.action==='logPass') return logEntry('pass');
+  }
+
+  function attachMove(el, b, del, rs){
+    let dragging=false, startPX=0, startPY=0, startX=0, startY=0;
+    el.addEventListener('pointerdown', (e)=>{
+      if(e.target===del || e.target===rs || rs.contains(e.target)) return;
+      dragging = true;
+      startPX = e.clientX; startPY = e.clientY;
+      startX = b.x; startY = b.y;
+      el.setPointerCapture(e.pointerId);
+    });
+    el.addEventListener('pointermove', (e)=>{
+      if(!dragging) return;
+      const cs = cellSize();
+      const dx = (e.clientX-startPX)/cs;
+      const dy = (e.clientY-startPY)/cs;
+      b.x = Math.max(-(b.w-0.2), Math.min(COLS-0.2, startX+dx));
+      b.y = Math.max(-(b.h-0.2), startY+dy);
+      layoutBtn(el, b, cs);
+    });
+    function end(){
+      if(!dragging) return;
+      dragging = false;
+      save(KEY_LAYOUT, layout);
+      renderGrid();
+    }
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+
+  function attachResize(rs, el, b){
+    let resizing=false, startPX=0, startPY=0, startW=0, startH=0;
+    rs.addEventListener('pointerdown', (e)=>{
+      resizing = true;
+      startPX = e.clientX; startPY = e.clientY;
+      startW = b.w; startH = b.h;
+      rs.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+    });
+    rs.addEventListener('pointermove', (e)=>{
+      if(!resizing) return;
+      const cs = cellSize();
+      const dw = (e.clientX-startPX)/cs;
+      const dh = (e.clientY-startPY)/cs;
+      b.w = Math.max(0.15, Math.min(COLS-b.x, startW+dw));
+      b.h = Math.max(0.15, startH+dh);
+      layoutBtn(el, b, cs);
+      e.stopPropagation();
+    });
+    function end(e){
+      if(!resizing) return;
+      resizing = false;
+      save(KEY_LAYOUT, layout);
+      renderGrid();
+      if(e) e.stopPropagation();
+    }
+    rs.addEventListener('pointerup', end);
+    rs.addEventListener('pointercancel', end);
+  }
+
+  function openAddButtonModal(){
+    modalRoot.innerHTML = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>Add a button</h3>
+        <label>Label (what it shows)</label>
+        <input id="mLabel" maxlength="10" placeholder="e.g. 100">
+        <label>Inserts into the display</label>
+        <input id="mValue" maxlength="20" placeholder="e.g. 100">
+        <div class="modal-actions">
+          <button class="cancel" id="mCancel">Cancel</button>
+          <button class="confirm" id="mAdd">Add</button>
+        </div>
+      </div>`;
+    modalRoot.appendChild(overlay);
+    document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+    document.getElementById('mAdd').addEventListener('click', ()=>{
+      const label = document.getElementById('mLabel').value.trim();
+      const value = document.getElementById('mValue').value.trim();
+      if(!label || !value) return;
+      layout.push({id:'c'+Date.now(), x:0, y:maxRow(), w:1, h:1, action:'custom', value, label});
+      save(KEY_LAYOUT, layout);
+      modalRoot.innerHTML = '';
+      renderGrid();
+    });
+  }
+
+  editLayoutBtn.addEventListener('click', ()=>{
+    editMode = !editMode;
+    editLayoutBtn.classList.toggle('on', editMode);
+    renderGrid();
+  });
+  window.addEventListener('resize', renderGrid);
+  document.addEventListener('toolbox:tabshown', (e)=>{
+    if(e.detail && e.detail.tool==='calclog'){ renderGrid(); renderHeaderGrid(); }
+  });
+
+  // ---------- header widget grid (freeform, draggable, resizable) ----------
+  function headerColWidth(){
+    return Math.max(1, headerGrid.clientWidth / HEADER_COLS);
+  }
+  function headerMaxRow(){
+    return headerLayout.reduce((m,w)=> Math.max(m, w.y+w.h), 0);
+  }
+  function layoutHeaderTile(el, w, cw){
+    el.style.left = (w.x*cw) + 'px';
+    el.style.top = (w.y*HEADER_ROW) + 'px';
+    el.style.width = (w.w*cw) + 'px';
+    el.style.height = (w.h*HEADER_ROW) + 'px';
+  }
+
+  function renderHeaderGrid(){
+    headerGrid.innerHTML = '';
+    const cw = headerColWidth();
+    headerLayout.forEach(w=>{
+      const el = document.createElement('div');
+      el.className = 'header-tile' + (headerEditMode ? ' editing' : '');
+      const body = widgetBodies[w.id];
+      if(body) el.appendChild(body); // re-parents the persistent node, listeners stay intact
+      if(headerEditMode){
+        const rs = document.createElement('div');
+        rs.className = 'tile-resize';
+        rs.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="17" cy="17" r="1.6"/><circle cx="17" cy="11" r="1.6"/><circle cx="11" cy="17" r="1.6"/></svg>';
+        el.appendChild(rs);
+        attachHeaderResize(rs, el, w);
+        attachHeaderMove(el, w);
+      }
+      layoutHeaderTile(el, w, cw);
+      headerGrid.appendChild(el);
+    });
+    headerGrid.style.height = (headerMaxRow()*HEADER_ROW) + 'px';
+  }
+
+  function attachHeaderMove(el, w){
+    let dragging=false, startPX=0, startPY=0, startX=0, startY=0;
+    el.addEventListener('pointerdown', (e)=>{
+      if(e.target.closest('.tile-resize')) return;
+      dragging = true;
+      startPX = e.clientX; startPY = e.clientY;
+      startX = w.x; startY = w.y;
+      el.setPointerCapture(e.pointerId);
+    });
+    el.addEventListener('pointermove', (e)=>{
+      if(!dragging) return;
+      const cw = headerColWidth();
+      const dx = (e.clientX-startPX)/cw;
+      const dy = (e.clientY-startPY)/HEADER_ROW;
+      w.x = Math.max(-(w.w-0.2), Math.min(HEADER_COLS-0.2, startX+dx));
+      w.y = Math.max(-(w.h-0.2), startY+dy);
+      layoutHeaderTile(el, w, cw);
+    });
+    function end(){
+      if(!dragging) return;
+      dragging = false;
+      save(KEY_HEADER_LAYOUT, headerLayout);
+      renderHeaderGrid();
+    }
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+
+  function attachHeaderResize(rs, el, w){
+    let resizing=false, startPX=0, startPY=0, startW=0, startH=0;
+    rs.addEventListener('pointerdown', (e)=>{
+      resizing = true;
+      startPX = e.clientX; startPY = e.clientY;
+      startW = w.w; startH = w.h;
+      rs.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+    });
+    rs.addEventListener('pointermove', (e)=>{
+      if(!resizing) return;
+      const cw = headerColWidth();
+      const dw = (e.clientX-startPX)/cw;
+      const dh = (e.clientY-startPY)/HEADER_ROW;
+      w.w = Math.max(0.6, Math.min(HEADER_COLS-w.x, startW+dw));
+      w.h = Math.max(0.6, startH+dh);
+      layoutHeaderTile(el, w, cw);
+      e.stopPropagation();
+    });
+    function end(e){
+      if(!resizing) return;
+      resizing = false;
+      save(KEY_HEADER_LAYOUT, headerLayout);
+      renderHeaderGrid();
+      if(e) e.stopPropagation();
+    }
+    rs.addEventListener('pointerup', end);
+    rs.addEventListener('pointercancel', end);
+  }
+
+  rearrangeHeaderBtn.addEventListener('click', ()=>{
+    headerEditMode = !headerEditMode;
+    rearrangeHeaderBtn.classList.toggle('on', headerEditMode);
+    rearrangeHeaderLabel.textContent = headerEditMode ? 'Done' : 'Rearrange';
+    resetHeaderBtn.style.display = headerEditMode ? 'inline-flex' : 'none';
+    renderHeaderGrid();
+  });
+  resetHeaderBtn.addEventListener('click', ()=>{
+    const def = defaultHeaderLayout();
+    headerLayout.forEach(w=>{
+      const d = def.find(x=>x.id===w.id);
+      if(d){ w.x=d.x; w.y=d.y; w.w=d.w; w.h=d.h; }
+    });
+    save(KEY_HEADER_LAYOUT, headerLayout);
+    renderHeaderGrid();
+    showToast('Controls reset to default layout');
+  });
+  window.addEventListener('resize', renderHeaderGrid);
+
+  // ---------- logging + history ----------
+  function dateKeyOf(ts){
+    const d = new Date(ts);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  function dayLabel(key){
+    const today = dateKeyOf(Date.now());
+    const yest = dateKeyOf(Date.now()-86400000);
+    if(key===today) return 'Today';
+    if(key===yest) return 'Yesterday';
+    const [y,m,d] = key.split('-').map(Number);
+    return new Date(y,m-1,d).toLocaleDateString(undefined,{month:'short', day:'numeric', year:'numeric'});
+  }
+
+  // ---- entry date picker (defaults to today, but lets you log for a past day) ----
+  let logDate = dateKeyOf(Date.now()); // yyyy-mm-dd of the date new entries get logged against
+  const logDateInput = document.getElementById('logDateInput');
+  const resetDateBtn = document.getElementById('resetDateBtn');
+
+  function composeTsForDate(dateKey){
+    // New entries should always land at the top (newest) of their day's list, the same
+    // way today's entries do — so give backdated entries a ts strictly after every
+    // existing entry already logged for that date, instead of just reusing the
+    // current wall-clock time (which could sort BEFORE entries logged earlier today
+    // for that same past date, e.g. entries made at 19:20 vs. one added now at 10:00).
+    const [y,m,d] = dateKey.split('-').map(Number);
+    const dayStart = new Date(y, m-1, d, 0,0,0,0).getTime();
+    const now = new Date();
+    const nowOnDate = new Date(y, m-1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()).getTime();
+    const existingForDay = entries.filter(e=>e.dateKey===dateKey).map(e=>e.ts);
+    const latest = existingForDay.length ? Math.max(...existingForDay) : dayStart;
+    return Math.max(nowOnDate, latest+1);
+  }
+  function refreshDateInputUI(){
+    logDateInput.value = logDate;
+    const isToday = logDate === dateKeyOf(Date.now());
+    logDateInput.classList.toggle('backdated', !isToday);
+    resetDateBtn.style.display = isToday ? 'none' : 'inline-flex';
+  }
+  logDateInput.addEventListener('change', ()=>{
+    if(!logDateInput.value){ logDateInput.value = logDate; return; }
+    logDate = logDateInput.value;
+    refreshDateInputUI();
+  });
+  resetDateBtn.addEventListener('click', ()=>{
+    logDate = dateKeyOf(Date.now());
+    refreshDateInputUI();
+  });
+  refreshDateInputUI();
+
+  function logEntry(kind){
+    const raw = calcDisplay.value.trim();
+    if(!raw){ showToast('Type a number or expression first'); return; }
+    if(!activeFriend){ showToast('Pick or add a friend first'); return; }
+    let value;
+    try{ value = evaluate(raw); }
+    catch(e){ showToast("That doesn't evaluate to a number"); return; }
+    const dateKey = logDate;
+    const ts = composeTsForDate(dateKey);
+    entries.push({ id:'e'+Date.now()+Math.random().toString(36).slice(2,7), ts, dateKey, friend:activeFriend, kind, raw, value });
+    save(KEY_ENTRIES, entries);
+    calcDisplay.value = '';
+    updatePreview();
+    renderHistory();
+    const dateNote = dateKey===dateKeyOf(Date.now()) ? '' : (' for '+dayLabel(dateKey));
+    showToast((kind==='sum'?'Logged sum for ':'Logged pass for ')+activeFriend+dateNote);
+  }
+
+  function confirmDeleteEntry(id){
+    modalRoot.innerHTML = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>Delete this entry?</h3>
+        <p>You'll get a chance to undo right after.</p>
+        <div class="modal-actions">
+          <button class="cancel" id="mCancel">Cancel</button>
+          <button class="confirm danger" id="mDel">Delete</button>
+        </div>
+      </div>`;
+    modalRoot.appendChild(overlay);
+    document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+    document.getElementById('mDel').addEventListener('click', ()=>{
+      modalRoot.innerHTML = '';
+      deleteEntry(id);
+    });
+  }
+
+  function deleteEntry(id){
+    const idx = entries.findIndex(e=>e.id===id);
+    if(idx<0) return;
+    const [removed] = entries.splice(idx, 1);
+    save(KEY_ENTRIES, entries);
+    renderHistory();
+    showToast('Entry deleted', 'Undo', ()=>{
+      entries.splice(idx, 0, removed);
+      save(KEY_ENTRIES, entries);
+      renderHistory();
+    });
+  }
+
+  function openEditEntryModal(id){
+    const entry = entries.find(e=>e.id===id);
+    if(!entry) return;
+    modalRoot.innerHTML = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    const friendOptions = Array.from(new Set([entry.friend, ...friends]))
+      .map(n=> `<option value="${escapeHtml(n)}"${n===entry.friend?' selected':''}>${escapeHtml(n)}</option>`).join('');
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>Edit entry</h3>
+        <label>Friend</label>
+        <select id="eFriend">${friendOptions}</select>
+        <label>Type</label>
+        <select id="eKind">
+          <option value="sum"${entry.kind==='sum'?' selected':''}>Sum</option>
+          <option value="pass"${entry.kind==='pass'?' selected':''}>Pass</option>
+        </select>
+        <label>Value / expression</label>
+        <input id="eRaw" value="${escapeHtml(entry.raw)}">
+        <label>Date</label>
+        <input type="date" id="eDate" value="${entry.dateKey}">
+        <div class="modal-actions">
+          <button class="cancel" id="mCancel">Cancel</button>
+          <button class="confirm" id="mSave">Save</button>
+        </div>
+      </div>`;
+    modalRoot.appendChild(overlay);
+    document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+    document.getElementById('mSave').addEventListener('click', ()=>{
+      const raw = document.getElementById('eRaw').value.trim();
+      let value;
+      try{ value = evaluate(raw); }
+      catch(e){ showToast("That doesn't evaluate to a number"); return; }
+      const newDateKey = document.getElementById('eDate').value || entry.dateKey;
+      entry.raw = raw;
+      entry.value = value;
+      entry.kind = document.getElementById('eKind').value;
+      entry.friend = document.getElementById('eFriend').value;
+      if(newDateKey !== entry.dateKey){
+        entry.dateKey = newDateKey;
+        entry.ts = composeTsForDate(newDateKey);
+      }
+      save(KEY_ENTRIES, entries);
+      modalRoot.innerHTML = '';
+      renderHistory();
+      showToast('Entry updated');
+    });
+  }
+
+  function populateHistoryFilter(){
+    const names = Array.from(new Set([...friends, ...entries.map(e=>e.friend)])).sort((a,b)=>a.localeCompare(b));
+    const prev = historyFilterEl.value || historyFilter;
+    historyFilterEl.innerHTML = '<option value="all">All friends</option>' +
+      names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    historyFilterEl.value = names.includes(prev) || prev==='all' ? prev : 'all';
+    historyFilter = historyFilterEl.value;
+  }
+  historyFilterEl.addEventListener('change', ()=>{
+    historyFilter = historyFilterEl.value;
+    renderHistory();
+  });
+
+  function renderHistory(){
+    historyWrap.innerHTML = '';
+    populateHistoryFilter();
+    if(!entries.length){
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'No entries yet — log a sum or a pass above to get started.';
+      historyWrap.appendChild(hint);
+      return;
+    }
+    const byDay = {};
+    entries.forEach(e=>{ (byDay[e.dateKey] = byDay[e.dateKey]||[]).push(e); });
+    const dayKeys = Object.keys(byDay).sort().reverse();
+    const todayKey = dateKeyOf(Date.now());
+    let renderedAny = false;
+
+    dayKeys.forEach(key=>{
+      const dayEntries = byDay[key].slice().sort((a,b)=>a.ts-b.ts);
+      const group = document.createElement('div');
+      group.className = 'day-group' + (key===todayKey ? '' : ' collapsed');
+
+      // per-friend + grand running totals, computed in chronological order (always over the FULL day,
+      // so a friend filter never distorts the running totals — it only hides other friends' lines)
+      const perFriendSum = {}, perFriendPass = {};
+      let grandSum = 0, grandPass = 0;
+      const lineData = dayEntries.map(e=>{
+        if(e.kind==='sum'){
+          const prev = perFriendSum[e.friend] || 0;
+          perFriendSum[e.friend] = prev + e.value;
+          grandSum += e.value;
+          return {e, prevTotal:prev, newTotal:perFriendSum[e.friend]};
+        } else {
+          const prev = perFriendPass[e.friend] || 0;
+          perFriendPass[e.friend] = prev + e.value;
+          grandPass += e.value;
+          return {e, prevTotal:prev, newTotal:perFriendPass[e.friend]};
+        }
+      });
+
+      const visibleLines = historyFilter==='all' ? lineData : lineData.filter(ld=> ld.e.friend===historyFilter);
+      if(!visibleLines.length) return; // nothing for this friend on this day — skip the whole group
+      renderedAny = true;
+
+      const head = document.createElement('div');
+      head.className = 'day-head';
+      const headSum = historyFilter==='all' ? grandSum : (perFriendSum[historyFilter]||0);
+      const headPass = historyFilter==='all' ? grandPass : (perFriendPass[historyFilter]||0);
+      const dayNet = netInfo(headSum, headPass);
+      head.innerHTML = `
+        <div>
+          <div class="day-head-title">${dayLabel(key)}</div>
+          <div class="day-head-sub">Sum total ${round2(headSum)} · Pass total ${round2(headPass)} · <span class="${dayNet.cls}">${dayNet.txt}</span></div>
+        </div>
+        <svg class="day-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>`;
+      head.addEventListener('click', ()=>{ group.classList.toggle('collapsed'); });
+      group.appendChild(head);
+
+      const body = document.createElement('div');
+      body.className = 'day-body';
+
+      if(historyFilter==='all'){
+        const subtotals = document.createElement('div');
+        subtotals.className = 'friend-subtotals';
+        const names = Array.from(new Set(dayEntries.map(e=>e.friend)));
+        names.forEach(name=>{
+          const card = document.createElement('div');
+          card.className = 'subtotal-card';
+          const fNet = netInfo(perFriendSum[name]||0, perFriendPass[name]||0);
+          card.innerHTML = `<div class="name">${escapeHtml(name)}</div><div class="vals">sum ${round2(perFriendSum[name]||0)} · pass ${round2(perFriendPass[name]||0)} · <span class="${fNet.cls}">${fNet.txt}</span></div>`;
+          subtotals.appendChild(card);
+        });
+        body.appendChild(subtotals);
+      }
+
+      // newest entry shown first; running totals above were computed chronologically
+      visibleLines.slice().reverse().forEach(({e, prevTotal, newTotal})=>{
+        const line = document.createElement('div');
+        line.className = 'entry-line';
+        const time = new Date(e.ts).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+        const detail = `${escapeHtml(e.raw)} = <b>${round2(e.value)}</b> &nbsp;(${round2(prevTotal)} → ${round2(newTotal)})`;
+        line.innerHTML = `
+          <div class="entry-main">
+            <span class="entry-time">${time}</span> · <span class="entry-friend">${escapeHtml(e.friend)}</span>
+            <div class="entry-detail${e.kind==='pass'?' pass':''}">${detail}</div>
+          </div>
+          <div class="entry-actions">
+            <button class="entry-edit" title="Edit entry">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+            <button class="entry-del" title="Delete entry">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12"/></svg>
+            </button>
+          </div>`;
+        line.querySelector('.entry-edit').addEventListener('click', ()=> openEditEntryModal(e.id));
+        line.querySelector('.entry-del').addEventListener('click', ()=> confirmDeleteEntry(e.id));
+        body.appendChild(line);
+      });
+
+      group.appendChild(body);
+      historyWrap.appendChild(group);
+    });
+
+    if(!renderedAny){
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = historyFilter==='all' ? 'No entries yet.' : ('No entries yet for ' + historyFilter + '.');
+      historyWrap.appendChild(hint);
+    }
+  }
+
+  // ---------- backup & restore ----------
+  function openBackupModal(){
+    modalRoot.innerHTML = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>Backup & restore</h3>
+        <div class="backup-row" id="exportRow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+          <div class="txt"><b>Export a backup file</b><span>Saves friends, history & keypad layout as a .json file</span></div>
+        </div>
+        <div class="backup-row" id="importRow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9m0 0 4 4m-4-4-4 4"/><path d="M5 3v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3"/></svg>
+          <div class="txt"><b>Import a backup file</b><span>Replaces everything currently on this device</span></div>
+        </div>
+        <input type="file" id="importFile" accept="application/json" style="display:none;">
+        <div class="modal-actions">
+          <button class="cancel" id="mCancel">Close</button>
+        </div>
+      </div>`;
+    modalRoot.appendChild(overlay);
+    document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+    document.getElementById('exportRow').addEventListener('click', exportBackup);
+    document.getElementById('importRow').addEventListener('click', ()=> document.getElementById('importFile').click());
+    document.getElementById('importFile').addEventListener('change', handleImportFile);
+  }
+
+  function exportBackup(){
+    const data = {
+      type:'toolbox-backup', version:1, exportedAt:new Date().toISOString(),
+      friends, entries, layout, headerLayout, customLabels,
+      theme: (()=>{ try{ return localStorage.getItem('toolbox_theme')||'light'; }catch(e){ return 'light'; } })()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const d = new Date();
+    a.href = url;
+    a.download = 'toolbox-backup-' + d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 2000);
+    showToast('Backup file downloaded');
+  }
+
+  function handleImportFile(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      let data;
+      try{ data = JSON.parse(reader.result); }
+      catch(err){ showToast('Could not read that file'); return; }
+      if(!data || !Array.isArray(data.friends) || !Array.isArray(data.entries)){
+        showToast("That file doesn't look like a valid backup"); return;
+      }
+      confirmImport(data);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }
+
+  function confirmImport(data){
+    modalRoot.innerHTML = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>Replace all data?</h3>
+        <p>Importing this backup (${data.entries.length} entries, ${data.friends.length} friends) will overwrite everything currently saved on this device. This can't be undone.</p>
+        <div class="modal-actions">
+          <button class="cancel" id="mCancel">Cancel</button>
+          <button class="confirm danger" id="mImport">Replace</button>
+        </div>
+      </div>`;
+    modalRoot.appendChild(overlay);
+    document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+    overlay.addEventListener('click', (ev)=>{ if(ev.target===overlay) modalRoot.innerHTML=''; });
+    document.getElementById('mImport').addEventListener('click', ()=>{
+      friends = data.friends || [];
+      entries = data.entries || [];
+      if(Array.isArray(data.layout) && data.layout.length) layout = data.layout;
+      if(Array.isArray(data.headerLayout) && data.headerLayout.length){
+        headerLayout.forEach(w=>{
+          const d = data.headerLayout.find(x=>x.id===w.id);
+          if(d){ w.x=d.x; w.y=d.y; w.w=d.w; w.h=d.h; }
+        });
+      }
+      if(data.customLabels && typeof data.customLabels==='object'){
+        customLabels = Object.assign({}, defaultLabels, data.customLabels);
+        save(KEY_LABELS, customLabels);
+      }
+      activeFriend = friends[0] || null;
+      save(KEY_FRIENDS, friends);
+      save(KEY_ENTRIES, entries);
+      save(KEY_LAYOUT, layout);
+      save(KEY_HEADER_LAYOUT, headerLayout);
+      if(data.theme){
+        try{ localStorage.setItem('toolbox_theme', data.theme); }catch(err){}
+        document.documentElement.setAttribute('data-theme', data.theme);
+      }
+      modalRoot.innerHTML = '';
+      applyLabels();
+      renderFriends();
+      updateActiveLabel();
+      renderGrid();
+      renderHeaderGrid();
+      renderHistory();
+      showToast('Backup restored');
+    });
+  }
+
+  backupBtn.addEventListener('click', openBackupModal);
+
+  // ---------- calc display resize ----------
+  (function(){
+    const wrap = document.getElementById('calcDisplayWrap');
+    const handle = document.getElementById('calcResizeHandle');
+    const MIN_H = 52;
+    const maxH = () => window.innerHeight * 0.5;
+    let resizing = false, startY = 0, startHeight = 0;
+
+    const savedH = load(KEY_DISPLAY_H, null);
+    if(savedH) wrap.style.height = Math.max(MIN_H, Math.min(maxH(), savedH)) + 'px';
+
+    handle.addEventListener('pointerdown', (e)=>{
+      resizing = true;
+      startY = e.clientY;
+      startHeight = wrap.getBoundingClientRect().height;
+      handle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    handle.addEventListener('pointermove', (e)=>{
+      if(!resizing) return;
+      const delta = e.clientY - startY;
+      const newHeight = Math.max(MIN_H, Math.min(maxH(), startHeight + delta));
+      wrap.style.height = newHeight + 'px';
+      e.stopPropagation();
+    });
+    function endResize(e){
+      if(!resizing) return;
+      resizing = false;
+      save(KEY_DISPLAY_H, wrap.getBoundingClientRect().height);
+    }
+    handle.addEventListener('pointerup', endResize);
+    handle.addEventListener('pointercancel', endResize);
+  })();
+
+  // ---------- init ----------
+  applyLabels();
+  renderFriends();
+  updateActiveLabel();
+  renderGrid();
+  renderHeaderGrid();
+  renderHistory();
+  updatePreview();
+  if(window.__toolboxRefreshSwipeHeight) window.__toolboxRefreshSwipeHeight();
+})();
+</script>
+</body>
+</html>
