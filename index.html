@@ -1436,6 +1436,13 @@
           <span>Edit start</span>
         </button>
       </div>
+      <div class="period-since-row">
+        <div class="period-since" id="periodUntilText">Until —</div>
+        <button class="mini-btn" id="periodEditEndBtn" title="Set a custom end date & time">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <span>Edit end</span>
+        </button>
+      </div>
       <div class="stats-row period-stats" id="periodStatsRow"></div>
       <div class="period-actions">
         <button class="tool-btn accent" id="periodResetBtn">
@@ -2006,7 +2013,7 @@ tryAutoUnlock();
   }
   function save(key, val){
     try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
-    if(key===KEY_FRIENDS || key===KEY_ENTRIES || key===KEY_LAYOUT || key===KEY_HEADER_LAYOUT || key===KEY_LABELS || key===KEY_PERIOD_START || key===KEY_BONUS_PCT){
+    if(key===KEY_FRIENDS || key===KEY_ENTRIES || key===KEY_LAYOUT || key===KEY_HEADER_LAYOUT || key===KEY_LABELS || key===KEY_PERIOD_START || key===KEY_PERIOD_END || key===KEY_BONUS_PCT){
       scheduleSync();
     }
   }
@@ -2060,11 +2067,13 @@ tryAutoUnlock();
 
   // ---- period summary (running totals since the last reset) ----
   const KEY_PERIOD_START = 'toolbox_calc_period_start';
+  const KEY_PERIOD_END = 'toolbox_calc_period_end';
   const KEY_BONUS_PCT = 'toolbox_calc_bonus_pct';
   const KEY_KEY_FONT = 'toolbox_calc_keyfont';
   const KEY_KEY_ACCENT_FONT = 'toolbox_calc_key_accent_font';
   let periodStart = load(KEY_PERIOD_START, null);
   if(!periodStart){ periodStart = Date.now(); save(KEY_PERIOD_START, periodStart); }
+  let periodEnd = load(KEY_PERIOD_END, null); // null = open-ended, counts up to now
   let bonusPct = load(KEY_BONUS_PCT, 4); // percent, e.g. 4 = 4%
   let periodUndoPrev = null; // in-memory only — powers the "Undo" on the reset toast
   let periodPanelOpen = false;
@@ -2105,6 +2114,7 @@ tryAutoUnlock();
   const KEY_LOCAL_UPDATED = 'toolbox_local_updated';
   let syncTimer = null;
   let pendingSync = false;
+  let reconciled = false; // true once the first pull-vs-local reconcile has resolved
 
   function setSyncStatus(state){
     if(!saveStatusEl) return;
@@ -2127,12 +2137,13 @@ tryAutoUnlock();
 
   async function performSync(){
     if(!SUPABASE_CONFIGURED) return;
+    if(!reconciled){ pendingSync = true; return; } // don't push until we know how we compare to remote — avoids clobbering good remote data with a not-yet-merged local state
     if(!navigator.onLine){ setSyncStatus('offline'); return; }
     try{
       const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
       if(userErr || !userData || !userData.user){ setSyncStatus('offline'); return; }
       const uid = userData.user.id;
-      const payload = { friends, entries, layout, headerLayout, customLabels, periodStart, bonusPct };
+      const payload = { friends, entries, layout, headerLayout, customLabels, periodStart, periodEnd, bonusPct };
       const nowIso = new Date().toISOString();
       const { error } = await supabaseClient.from('toolbox_state').upsert(
         { user_id: uid, payload, updated_at: nowIso },
@@ -2163,29 +2174,55 @@ tryAutoUnlock();
       const localUpdated = localStorage.getItem(KEY_LOCAL_UPDATED);
       if(row && row.updated_at && (!localUpdated || new Date(row.updated_at) > new Date(localUpdated))){
         const p = row.payload || {};
-        friends = Array.isArray(p.friends) ? p.friends : friends;
-        entries = Array.isArray(p.entries) ? p.entries : entries;
+        // Guard against an empty/incomplete remote payload wiping out real local
+        // data (e.g. a second browser's very first, still-empty state getting
+        // treated as "newer"). Only adopt remote friends/entries if remote
+        // actually has something, OR local is already empty too (fresh setup).
+        if(Array.isArray(p.friends) && (p.friends.length || friends.length === 0)) friends = p.friends;
+        if(Array.isArray(p.entries) && (p.entries.length || entries.length === 0)) entries = p.entries;
         if(Array.isArray(p.layout) && p.layout.length) layout = p.layout;
         if(Array.isArray(p.headerLayout) && p.headerLayout.length) headerLayout = p.headerLayout;
         if(p.customLabels && typeof p.customLabels==='object') customLabels = Object.assign({}, defaultLabels, p.customLabels);
         if(typeof p.periodStart==='number') periodStart = p.periodStart;
+        periodEnd = (typeof p.periodEnd==='number') ? p.periodEnd : null;
         if(typeof p.bonusPct==='number') bonusPct = p.bonusPct;
         save(KEY_FRIENDS, friends); save(KEY_ENTRIES, entries); save(KEY_LAYOUT, layout);
         save(KEY_HEADER_LAYOUT, headerLayout); save(KEY_LABELS, customLabels);
-        save(KEY_PERIOD_START, periodStart); save(KEY_BONUS_PCT, bonusPct);
+        save(KEY_PERIOD_START, periodStart); save(KEY_PERIOD_END, periodEnd); save(KEY_BONUS_PCT, bonusPct);
         localStorage.setItem(KEY_LOCAL_UPDATED, row.updated_at);
         activeFriend = friends[0] || null;
-        applyLabels(); renderFriends(); updateActiveLabel(); renderGrid(); renderHeaderGrid(); renderHistory(); updatePreview(); renderPeriodPanel();
+        safeRenderAll();
         setSyncStatus('saved');
       } else {
         await performSync();
       }
     }catch(e){
       setSyncStatus('offline');
+    } finally {
+      reconciled = true;
+      if(pendingSync){ performSync(); }
     }
   }
   window.__toolboxOnUnlock = pullAndReconcile;
   setSyncStatus(SUPABASE_CONFIGURED ? 'saved' : null);
+  if(!SUPABASE_CONFIGURED) reconciled = true;
+
+  // Runs each render step independently — if one throws (e.g. from an
+  // unexpected data shape), the rest of the UI still renders instead of
+  // the whole screen going blank after the first failure.
+  function safeStep(fn){
+    try{ fn(); }catch(err){ console.error('[toolbox] render step failed:', err); }
+  }
+  function safeRenderAll(){
+    safeStep(applyLabels);
+    safeStep(renderFriends);
+    safeStep(updateActiveLabel);
+    safeStep(renderGrid);
+    safeStep(renderHeaderGrid);
+    safeStep(renderHistory);
+    safeStep(updatePreview);
+    safeStep(renderPeriodPanel);
+  }
 
   function showToast(msg, actionLabel, onAction){
     toastEl.classList.remove('dragging');
@@ -2643,6 +2680,7 @@ tryAutoUnlock();
   const periodToggleBtn = document.getElementById('periodToggleBtn');
   const periodPanel = document.getElementById('periodPanel');
   const periodSinceText = document.getElementById('periodSinceText');
+  const periodUntilText = document.getElementById('periodUntilText');
   const periodStatsRow = document.getElementById('periodStatsRow');
 
   function formatPeriodDateTime(ts){
@@ -2655,6 +2693,7 @@ tryAutoUnlock();
     let sum = 0, pass = 0;
     entries.forEach(e=>{
       if(e.ts < periodStart) return;
+      if(periodEnd != null && e.ts > periodEnd) return;
       if(historyFilter !== 'all' && e.friend !== historyFilter) return;
       if(e.kind === 'sum') sum += e.value;
       else if(e.kind === 'pass') pass += e.value;
@@ -2668,6 +2707,11 @@ tryAutoUnlock();
   function renderPeriodPanel(){
     if(!periodSinceText) return; // guard in case this tool's DOM isn't in this tab
     periodSinceText.innerHTML = 'Since <b>' + escapeHtml(formatPeriodDateTime(periodStart)) + '</b>';
+    if(periodUntilText){
+      periodUntilText.innerHTML = periodEnd != null
+        ? 'Until <b>' + escapeHtml(formatPeriodDateTime(periodEnd)) + '</b>'
+        : 'Until <b>now</b> (ongoing)';
+    }
     if(!periodPanelOpen) return; // no need to recompute while the panel is collapsed
     const t = computePeriodTotals();
     const netCls = t.net > 0 ? 'pos' : (t.net < 0 ? 'neg' : '');
@@ -2705,37 +2749,76 @@ tryAutoUnlock();
   }
 
   function openPeriodStartModal(mode){
-    // mode: 'reset' (defaults the picker to "now", touches the running Undo) or 'edit' (defaults to the current start)
+    // mode: 'reset' (defaults the picker to "now", touches the running Undo),
+    // 'edit' (start date, defaults to the current start), or
+    // 'editEnd' (end date, defaults to current end or now; can be cleared to open-ended)
     const isReset = mode === 'reset';
-    const defaultTs = isReset ? Date.now() : periodStart;
+    const isEnd = mode === 'editEnd';
+    const defaultTs = isReset ? Date.now() : (isEnd ? (periodEnd != null ? periodEnd : Date.now()) : periodStart);
     modalRoot.innerHTML = '';
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
       <div class="modal-card">
-        <h3>${isReset ? 'Reset period totals?' : 'Set starting date & time'}</h3>
+        <h3>${isReset ? 'Reset period totals?' : (isEnd ? 'Set end date & time' : 'Set starting date & time')}</h3>
         <p>${isReset
           ? "This only restarts the Period Summary count \u2014 nothing in your daily history or entries gets deleted. You'll be able to undo right after."
-          : 'Move the Period Summary\u2019s starting point without touching your history.'}</p>
-        <label>Start counting from</label>
+          : (isEnd
+            ? 'Only count entries up to this point. Leave it cleared to keep counting up to now.'
+            : 'Move the Period Summary\u2019s starting point without touching your history.')}</p>
+        <label>${isEnd ? 'Count up to' : 'Start counting from'}</label>
         <input type="datetime-local" id="periodStartInput" value="${toLocalDatetimeInputValue(defaultTs)}">
         <div class="modal-actions">
           <button class="cancel" id="mCancel">Cancel</button>
+          ${isEnd ? '<button class="cancel" id="mClear">Clear (use now)</button>' : ''}
           <button class="confirm${isReset ? ' danger' : ''}" id="mGo">${isReset ? 'Reset' : 'Save'}</button>
         </div>
       </div>`;
     modalRoot.appendChild(overlay);
     document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
     overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+    const clearBtn = document.getElementById('mClear');
+    if(clearBtn){
+      clearBtn.addEventListener('click', ()=>{
+        const prevEnd = periodEnd;
+        periodEnd = null;
+        save(KEY_PERIOD_END, periodEnd);
+        modalRoot.innerHTML = '';
+        renderPeriodPanel();
+        showToast('End date cleared \u2014 counting up to now', 'Undo', ()=>{
+          periodEnd = prevEnd;
+          save(KEY_PERIOD_END, periodEnd);
+          renderPeriodPanel();
+        });
+      });
+    }
     document.getElementById('mGo').addEventListener('click', ()=>{
       const raw = document.getElementById('periodStartInput').value;
       if(!raw){ showToast('Pick a date & time first'); return; }
       const newTs = new Date(raw).getTime();
       if(isNaN(newTs)){ showToast('That date/time looks invalid'); return; }
+      if(isEnd){
+        if(newTs < periodStart){ showToast('End date can\u2019t be before the start date'); return; }
+        const prevEnd = periodEnd;
+        periodEnd = newTs;
+        save(KEY_PERIOD_END, periodEnd);
+        modalRoot.innerHTML = '';
+        renderPeriodPanel();
+        showToast('End date & time updated', 'Undo', ()=>{
+          periodEnd = prevEnd;
+          save(KEY_PERIOD_END, periodEnd);
+          renderPeriodPanel();
+        });
+        return;
+      }
+      if(!isReset && periodEnd != null && newTs > periodEnd){ showToast('Start date can\u2019t be after the end date'); return; }
       const prevStart = periodStart;
+      const prevEnd = periodEnd;
       periodUndoPrev = prevStart;
       periodStart = newTs;
+      if(isReset) periodEnd = null; // resetting starts a fresh, open-ended period
       save(KEY_PERIOD_START, periodStart);
+      if(isReset) save(KEY_PERIOD_END, periodEnd);
       modalRoot.innerHTML = '';
       renderPeriodPanel();
       showToast(
@@ -2743,7 +2826,9 @@ tryAutoUnlock();
         'Undo',
         ()=>{
           periodStart = prevStart;
+          periodEnd = prevEnd;
           save(KEY_PERIOD_START, periodStart);
+          save(KEY_PERIOD_END, periodEnd);
           renderPeriodPanel();
         }
       );
@@ -2752,6 +2837,7 @@ tryAutoUnlock();
 
   document.getElementById('periodResetBtn').addEventListener('click', ()=> openPeriodStartModal('reset'));
   document.getElementById('periodEditStartBtn').addEventListener('click', ()=> openPeriodStartModal('edit'));
+  document.getElementById('periodEditEndBtn').addEventListener('click', ()=> openPeriodStartModal('editEnd'));
 
   editFriendsBtn.addEventListener('click', ()=>{
     friendEditMode = !friendEditMode;
@@ -3390,7 +3476,7 @@ tryAutoUnlock();
   function exportBackup(){
     const data = {
       type:'toolbox-backup', version:1, exportedAt:new Date().toISOString(),
-      friends, entries, layout, headerLayout, customLabels, periodStart, bonusPct,
+      friends, entries, layout, headerLayout, customLabels, periodStart, periodEnd, bonusPct,
       theme: (()=>{ try{ return localStorage.getItem('toolbox_theme')||'light'; }catch(e){ return 'light'; } })()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
@@ -3454,6 +3540,8 @@ tryAutoUnlock();
         save(KEY_LABELS, customLabels);
       }
       if(typeof data.periodStart==='number'){ periodStart = data.periodStart; save(KEY_PERIOD_START, periodStart); }
+      periodEnd = (typeof data.periodEnd==='number') ? data.periodEnd : null;
+      save(KEY_PERIOD_END, periodEnd);
       if(typeof data.bonusPct==='number'){ bonusPct = data.bonusPct; save(KEY_BONUS_PCT, bonusPct); }
       activeFriend = friends[0] || null;
       save(KEY_FRIENDS, friends);
@@ -3465,13 +3553,7 @@ tryAutoUnlock();
         document.documentElement.setAttribute('data-theme', data.theme);
       }
       modalRoot.innerHTML = '';
-      applyLabels();
-      renderFriends();
-      updateActiveLabel();
-      renderGrid();
-      renderHeaderGrid();
-      renderHistory();
-      renderPeriodPanel();
+      safeRenderAll();
       showToast('Backup restored');
     });
   }
@@ -3514,13 +3596,7 @@ tryAutoUnlock();
   })();
 
   // ---------- init ----------
-  applyLabels();
-  renderFriends();
-  updateActiveLabel();
-  renderGrid();
-  renderHeaderGrid();
-  renderHistory();
-  updatePreview();
+  safeRenderAll();
   if(window.__toolboxRefreshSwipeHeight) window.__toolboxRefreshSwipeHeight();
 })();
 </script>
