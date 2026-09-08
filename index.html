@@ -39,6 +39,9 @@
     --pad-date-input-y:2px;    /* top/bottom padding inside the Entry date input */
     --pad-date-input-x:10px;   /* left/right padding inside the Entry date input */
     --gap-date-row:8px;        /* gap between "Entry date" label / input / Today button */
+
+    --key-font-size:16px;        /* font size of digits/operators/C/./etc on the keypad */
+    --key-accent-font-size:12.5px; /* font size of the "Log Sum" / "Log Pass" button text */
   }
   html[data-theme="dark"]{
     --bg:#1A1D26;
@@ -789,7 +792,7 @@
     background-clip:padding-box;
     color:var(--text);
     font-family:'Space Mono',monospace;
-    font-size:16px;
+    font-size:var(--key-font-size);
     font-weight:700;
     box-shadow:4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
     display:flex;align-items:center;justify-content:center;
@@ -804,7 +807,7 @@
     background:var(--accent);
     color:var(--accent-text);
     font-family:'Manrope',sans-serif;
-    font-size:12.5px;
+    font-size:var(--key-accent-font-size);
   }
   .btn-tile.op{ color:var(--accent); }
   .btn-tile.editing{
@@ -925,6 +928,7 @@
   .history-filter-row{
     display:flex;
     align-items:center;
+    flex-wrap:wrap;
     gap:8px;
     margin-bottom:10px;
     font-size:12.5px;
@@ -944,6 +948,67 @@
     font-weight:700;
     color:var(--text);
     outline:none;
+  }
+
+  /* ---- period summary (dropdown-style toggle + panel) ---- */
+  .period-toggle-btn{
+    flex:1;
+    max-width:220px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:6px;
+    padding:8px 10px;
+    border:none;
+    border-radius:11px;
+    background:var(--surface);
+    box-shadow:4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
+    font-family:'Manrope',sans-serif;
+    font-size:13px;
+    font-weight:700;
+    color:var(--text);
+    cursor:pointer;
+  }
+  .period-toggle-btn.open{
+    box-shadow:inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+    color:var(--accent);
+  }
+  .period-toggle-btn svg{
+    width:14px;height:14px;flex:none;
+    transition:transform .15s ease;
+  }
+  .period-toggle-btn.open svg{ transform:rotate(180deg); }
+
+  .period-panel{
+    background:var(--surface);
+    border-radius:18px;
+    box-shadow:5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    padding:14px;
+    margin-bottom:14px;
+  }
+  .period-since-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    margin-bottom:12px;
+  }
+  .period-since{
+    font-size:11.5px;
+    color:var(--text-dim);
+    font-weight:700;
+  }
+  .period-since b{ color:var(--text); font-family:'Space Mono',monospace; }
+  .period-stats{
+    grid-template-columns:repeat(2,1fr);
+    margin-bottom:14px;
+  }
+  .period-stats .stat-value{ font-size:19px; }
+  .stat-value.pos{ color:var(--accent); }
+  .stat-value.neg{ color:var(--danger); }
+  .period-actions{
+    display:flex;
+    gap:10px;
   }
   .empty-hint{
     text-align:center;
@@ -1285,6 +1350,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           <span>Labels</span>
         </button>
+        <button class="mini-btn" id="keypadSizeBtn" title="Adjust keypad font size">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M4 17v2a1 1 0 0 0 1 1h2M20 7V5a1 1 0 0 0-1-1h-2M20 17v2a1 1 0 0 1-1 1h-2"/><text x="8" y="16" font-size="10" font-family="sans-serif" fill="currentColor" stroke="none">A</text></svg>
+          <span>Keypad size</span>
+        </button>
         <button class="mini-btn" id="resetHeaderBtn" title="Reset to default layout" style="display:none;">Reset</button>
         <button class="mini-btn" id="rearrangeHeaderBtn" title="Rearrange these controls">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l4-4 4 4M9 5v14M19 15l-4 4-4-4M15 19V5"/></svg>
@@ -1345,7 +1414,29 @@
       <select id="historyFilter">
         <option value="all">All friends</option>
       </select>
+      <button class="period-toggle-btn" id="periodToggleBtn" title="Show totals since your last reset">
+        <span id="periodToggleLabel">Period Summary</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
     </div>
+
+    <div class="period-panel" id="periodPanel" style="display:none;">
+      <div class="period-since-row">
+        <div class="period-since" id="periodSinceText">Since —</div>
+        <button class="mini-btn" id="periodEditStartBtn" title="Set a custom starting date & time">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <span>Edit start</span>
+        </button>
+      </div>
+      <div class="stats-row period-stats" id="periodStatsRow"></div>
+      <div class="period-actions">
+        <button class="tool-btn accent" id="periodResetBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+          Reset period
+        </button>
+      </div>
+    </div>
+
     <div id="historyWrap"></div>
   </div>
 
@@ -1894,8 +1985,22 @@ tryAutoUnlock();
   const KEY_LAYOUT  = 'toolbox_calc_layout';
   const KEY_DISPLAY_H = 'toolbox_calc_display_h';
   const KEY_LABELS = 'toolbox_calc_labels';
-  const defaultLabels = { loggingFor:'Logging for', entryDate:'Entry date', editLayout:'Edit Layout' };
+  const defaultLabels = {
+    loggingFor:'Logging for', entryDate:'Entry date', editLayout:'Edit Layout',
+    periodSumTotal:'Sum Total', periodPassTotal:'Pass Total', periodBonus:'Bonus', periodNetTotal:'Net Total'
+  };
   let customLabels = Object.assign({}, defaultLabels, load(KEY_LABELS, {}));
+
+  // ---- period summary (running totals since the last reset) ----
+  const KEY_PERIOD_START = 'toolbox_calc_period_start';
+  const KEY_BONUS_PCT = 'toolbox_calc_bonus_pct';
+  const KEY_KEY_FONT = 'toolbox_calc_keyfont';
+  const KEY_KEY_ACCENT_FONT = 'toolbox_calc_key_accent_font';
+  let periodStart = load(KEY_PERIOD_START, null);
+  if(!periodStart){ periodStart = Date.now(); save(KEY_PERIOD_START, periodStart); }
+  let bonusPct = load(KEY_BONUS_PCT, 4); // percent, e.g. 4 = 4%
+  let periodUndoPrev = null; // in-memory only — powers the "Undo" on the reset toast
+  let periodPanelOpen = false;
   const COLS = 4, GAP = 8;
 
   function load(key, fallback){
@@ -1903,7 +2008,7 @@ tryAutoUnlock();
   }
   function save(key, val){
     try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
-    if(key===KEY_FRIENDS || key===KEY_ENTRIES || key===KEY_LAYOUT || key===KEY_HEADER_LAYOUT || key===KEY_LABELS){
+    if(key===KEY_FRIENDS || key===KEY_ENTRIES || key===KEY_LAYOUT || key===KEY_HEADER_LAYOUT || key===KEY_LABELS || key===KEY_PERIOD_START || key===KEY_BONUS_PCT){
       scheduleSync();
     }
   }
@@ -2018,7 +2123,7 @@ tryAutoUnlock();
       const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
       if(userErr || !userData || !userData.user){ setSyncStatus('offline'); return; }
       const uid = userData.user.id;
-      const payload = { friends, entries, layout, headerLayout, customLabels };
+      const payload = { friends, entries, layout, headerLayout, customLabels, periodStart, bonusPct };
       const nowIso = new Date().toISOString();
       const { error } = await supabaseClient.from('toolbox_state').upsert(
         { user_id: uid, payload, updated_at: nowIso },
@@ -2054,11 +2159,14 @@ tryAutoUnlock();
         if(Array.isArray(p.layout) && p.layout.length) layout = p.layout;
         if(Array.isArray(p.headerLayout) && p.headerLayout.length) headerLayout = p.headerLayout;
         if(p.customLabels && typeof p.customLabels==='object') customLabels = Object.assign({}, defaultLabels, p.customLabels);
+        if(typeof p.periodStart==='number') periodStart = p.periodStart;
+        if(typeof p.bonusPct==='number') bonusPct = p.bonusPct;
         save(KEY_FRIENDS, friends); save(KEY_ENTRIES, entries); save(KEY_LAYOUT, layout);
         save(KEY_HEADER_LAYOUT, headerLayout); save(KEY_LABELS, customLabels);
+        save(KEY_PERIOD_START, periodStart); save(KEY_BONUS_PCT, bonusPct);
         localStorage.setItem(KEY_LOCAL_UPDATED, row.updated_at);
         activeFriend = friends[0] || null;
-        applyLabels(); renderFriends(); updateActiveLabel(); renderGrid(); renderHeaderGrid(); renderHistory(); updatePreview();
+        applyLabels(); renderFriends(); updateActiveLabel(); renderGrid(); renderHeaderGrid(); renderHistory(); updatePreview(); renderPeriodPanel();
         setSyncStatus('saved');
       } else {
         await performSync();
@@ -2441,6 +2549,16 @@ tryAutoUnlock();
         <input id="lblEntryDate" maxlength="24" value="${escapeHtml(customLabels.entryDate)}" placeholder="Leave blank to hide">
         <label>Edit Layout button text</label>
         <input id="lblEditLayout" maxlength="24" value="${escapeHtml(customLabels.editLayout)}" placeholder="Leave blank to hide">
+        <label>"Sum Total" name (period summary)</label>
+        <input id="lblPeriodSum" maxlength="24" value="${escapeHtml(customLabels.periodSumTotal)}" placeholder="e.g. Sum Total">
+        <label>"Pass Total" name (period summary)</label>
+        <input id="lblPeriodPass" maxlength="24" value="${escapeHtml(customLabels.periodPassTotal)}" placeholder="e.g. Pass Total">
+        <label>"Bonus" name (period summary)</label>
+        <input id="lblPeriodBonus" maxlength="24" value="${escapeHtml(customLabels.periodBonus)}" placeholder="e.g. Bonus">
+        <label>"Net Total" name (period summary)</label>
+        <input id="lblPeriodNet" maxlength="24" value="${escapeHtml(customLabels.periodNetTotal)}" placeholder="e.g. Net Total">
+        <label>Bonus percentage (of Sum Total)</label>
+        <input id="lblBonusPct" type="number" min="0" max="100" step="0.1" value="${bonusPct}">
         <div class="modal-actions">
           <button class="cancel" id="mCancel">Cancel</button>
           <button class="confirm" id="mSave">Save</button>
@@ -2453,14 +2571,178 @@ tryAutoUnlock();
       customLabels.loggingFor = document.getElementById('lblLoggingFor').value;
       customLabels.entryDate = document.getElementById('lblEntryDate').value;
       customLabels.editLayout = document.getElementById('lblEditLayout').value;
+      customLabels.periodSumTotal = document.getElementById('lblPeriodSum').value || defaultLabels.periodSumTotal;
+      customLabels.periodPassTotal = document.getElementById('lblPeriodPass').value || defaultLabels.periodPassTotal;
+      customLabels.periodBonus = document.getElementById('lblPeriodBonus').value || defaultLabels.periodBonus;
+      customLabels.periodNetTotal = document.getElementById('lblPeriodNet').value || defaultLabels.periodNetTotal;
+      const pctVal = parseFloat(document.getElementById('lblBonusPct').value);
+      bonusPct = isNaN(pctVal) ? bonusPct : pctVal;
       save(KEY_LABELS, customLabels);
+      save(KEY_BONUS_PCT, bonusPct);
       modalRoot.innerHTML = '';
       applyLabels();
       updateActiveLabel();
+      renderPeriodPanel();
       showToast('Labels updated');
     });
   }
   document.getElementById('editLabelsBtn').addEventListener('click', openLabelsModal);
+
+  // ---------- keypad font size (digits/operators/C/./etc, and the Log Sum / Log Pass labels) ----------
+  (function(){
+    const savedKeyFont = load(KEY_KEY_FONT, 16);
+    const savedAccentFont = load(KEY_KEY_ACCENT_FONT, 12.5);
+    document.documentElement.style.setProperty('--key-font-size', savedKeyFont + 'px');
+    document.documentElement.style.setProperty('--key-accent-font-size', savedAccentFont + 'px');
+
+    document.getElementById('keypadSizeBtn').addEventListener('click', ()=>{
+      const curKey = load(KEY_KEY_FONT, 16);
+      const curAccent = load(KEY_KEY_ACCENT_FONT, 12.5);
+      modalRoot.innerHTML = '';
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = `
+        <div class="modal-card">
+          <h3>Keypad font size</h3>
+          <label>Numbers / operators / C / . <span id="keyFontVal">${curKey}px</span></label>
+          <input id="keyFontRange" type="range" min="11" max="30" step="0.5" value="${curKey}" style="width:100%;margin:6px 0 14px;">
+          <label>"Log Sum" / "Log Pass" text <span id="accentFontVal">${curAccent}px</span></label>
+          <input id="accentFontRange" type="range" min="9" max="20" step="0.5" value="${curAccent}" style="width:100%;margin:6px 0 14px;">
+          <div class="modal-actions">
+            <button class="confirm" id="mClose">Done</button>
+          </div>
+        </div>`;
+      modalRoot.appendChild(overlay);
+      const keyRange = document.getElementById('keyFontRange');
+      const accentRange = document.getElementById('accentFontRange');
+      keyRange.addEventListener('input', ()=>{
+        document.documentElement.style.setProperty('--key-font-size', keyRange.value + 'px');
+        document.getElementById('keyFontVal').textContent = keyRange.value + 'px';
+        save(KEY_KEY_FONT, parseFloat(keyRange.value));
+      });
+      accentRange.addEventListener('input', ()=>{
+        document.documentElement.style.setProperty('--key-accent-font-size', accentRange.value + 'px');
+        document.getElementById('accentFontVal').textContent = accentRange.value + 'px';
+        save(KEY_KEY_ACCENT_FONT, parseFloat(accentRange.value));
+      });
+      document.getElementById('mClose').addEventListener('click', ()=> modalRoot.innerHTML='');
+      overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+    });
+  })();
+
+  // ---------- period summary (running totals since the last reset) ----------
+  const periodToggleBtn = document.getElementById('periodToggleBtn');
+  const periodPanel = document.getElementById('periodPanel');
+  const periodSinceText = document.getElementById('periodSinceText');
+  const periodStatsRow = document.getElementById('periodStatsRow');
+
+  function formatPeriodDateTime(ts){
+    return new Date(ts).toLocaleString(undefined, {
+      weekday:'short', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'
+    });
+  }
+
+  function computePeriodTotals(){
+    let sum = 0, pass = 0;
+    entries.forEach(e=>{
+      if(e.ts < periodStart) return;
+      if(historyFilter !== 'all' && e.friend !== historyFilter) return;
+      if(e.kind === 'sum') sum += e.value;
+      else if(e.kind === 'pass') pass += e.value;
+    });
+    sum = round2(sum); pass = round2(pass);
+    const bonus = round2(sum * (bonusPct/100));
+    const net = round2(sum - pass - bonus);
+    return { sum, pass, bonus, net };
+  }
+
+  function renderPeriodPanel(){
+    if(!periodSinceText) return; // guard in case this tool's DOM isn't in this tab
+    periodSinceText.innerHTML = 'Since <b>' + escapeHtml(formatPeriodDateTime(periodStart)) + '</b>';
+    if(!periodPanelOpen) return; // no need to recompute while the panel is collapsed
+    const t = computePeriodTotals();
+    const netCls = t.net > 0 ? 'pos' : (t.net < 0 ? 'neg' : '');
+    const netTxt = t.net > 0 ? ('+' + t.net) : String(t.net);
+    periodStatsRow.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-value">${t.sum}</div>
+        <div class="stat-label">${escapeHtml(customLabels.periodSumTotal)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${t.pass}</div>
+        <div class="stat-label">${escapeHtml(customLabels.periodPassTotal)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${t.bonus}</div>
+        <div class="stat-label">${escapeHtml(customLabels.periodBonus)} (${bonusPct}%)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value ${netCls}">${netTxt}</div>
+        <div class="stat-label">${escapeHtml(customLabels.periodNetTotal)}</div>
+      </div>`;
+  }
+
+  periodToggleBtn.addEventListener('click', ()=>{
+    periodPanelOpen = !periodPanelOpen;
+    periodToggleBtn.classList.toggle('open', periodPanelOpen);
+    periodPanel.style.display = periodPanelOpen ? '' : 'none';
+    renderPeriodPanel();
+  });
+
+  function toLocalDatetimeInputValue(ts){
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2,'0');
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function openPeriodStartModal(mode){
+    // mode: 'reset' (defaults the picker to "now", touches the running Undo) or 'edit' (defaults to the current start)
+    const isReset = mode === 'reset';
+    const defaultTs = isReset ? Date.now() : periodStart;
+    modalRoot.innerHTML = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>${isReset ? 'Reset period totals?' : 'Set starting date & time'}</h3>
+        <p>${isReset
+          ? "This only restarts the Period Summary count \u2014 nothing in your daily history or entries gets deleted. You'll be able to undo right after."
+          : 'Move the Period Summary\u2019s starting point without touching your history.'}</p>
+        <label>Start counting from</label>
+        <input type="datetime-local" id="periodStartInput" value="${toLocalDatetimeInputValue(defaultTs)}">
+        <div class="modal-actions">
+          <button class="cancel" id="mCancel">Cancel</button>
+          <button class="confirm${isReset ? ' danger' : ''}" id="mGo">${isReset ? 'Reset' : 'Save'}</button>
+        </div>
+      </div>`;
+    modalRoot.appendChild(overlay);
+    document.getElementById('mCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+    document.getElementById('mGo').addEventListener('click', ()=>{
+      const raw = document.getElementById('periodStartInput').value;
+      if(!raw){ showToast('Pick a date & time first'); return; }
+      const newTs = new Date(raw).getTime();
+      if(isNaN(newTs)){ showToast('That date/time looks invalid'); return; }
+      const prevStart = periodStart;
+      periodUndoPrev = prevStart;
+      periodStart = newTs;
+      save(KEY_PERIOD_START, periodStart);
+      modalRoot.innerHTML = '';
+      renderPeriodPanel();
+      showToast(
+        isReset ? ('Period reset \u2014 now counting from ' + formatPeriodDateTime(periodStart)) : 'Start date & time updated',
+        'Undo',
+        ()=>{
+          periodStart = prevStart;
+          save(KEY_PERIOD_START, periodStart);
+          renderPeriodPanel();
+        }
+      );
+    });
+  }
+
+  document.getElementById('periodResetBtn').addEventListener('click', ()=> openPeriodStartModal('reset'));
+  document.getElementById('periodEditStartBtn').addEventListener('click', ()=> openPeriodStartModal('edit'));
 
   editFriendsBtn.addEventListener('click', ()=>{
     friendEditMode = !friendEditMode;
@@ -2959,6 +3241,7 @@ tryAutoUnlock();
   function renderHistory(){
     historyWrap.innerHTML = '';
     populateHistoryFilter();
+    renderPeriodPanel();
     if(!entries.length){
       const hint = document.createElement('div');
       hint.className = 'empty-hint';
@@ -3098,7 +3381,7 @@ tryAutoUnlock();
   function exportBackup(){
     const data = {
       type:'toolbox-backup', version:1, exportedAt:new Date().toISOString(),
-      friends, entries, layout, headerLayout, customLabels,
+      friends, entries, layout, headerLayout, customLabels, periodStart, bonusPct,
       theme: (()=>{ try{ return localStorage.getItem('toolbox_theme')||'light'; }catch(e){ return 'light'; } })()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
@@ -3161,6 +3444,8 @@ tryAutoUnlock();
         customLabels = Object.assign({}, defaultLabels, data.customLabels);
         save(KEY_LABELS, customLabels);
       }
+      if(typeof data.periodStart==='number'){ periodStart = data.periodStart; save(KEY_PERIOD_START, periodStart); }
+      if(typeof data.bonusPct==='number'){ bonusPct = data.bonusPct; save(KEY_BONUS_PCT, bonusPct); }
       activeFriend = friends[0] || null;
       save(KEY_FRIENDS, friends);
       save(KEY_ENTRIES, entries);
@@ -3177,6 +3462,7 @@ tryAutoUnlock();
       renderGrid();
       renderHeaderGrid();
       renderHistory();
+      renderPeriodPanel();
       showToast('Backup restored');
     });
   }
