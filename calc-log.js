@@ -82,10 +82,46 @@
   if(!periodStart){ periodStart = Date.now(); save(KEY_PERIOD_START, periodStart); }
   let periodEnd = load(KEY_PERIOD_END, null); // null = open-ended, counts up to now
   let bonusPct = load(KEY_BONUS_PCT, 4); // percent, e.g. 4 = 4%
-  let customVars = load(KEY_CUSTOM_VARS, []);     // [{id, name, value}]
-  let customPanels = load(KEY_CUSTOM_PANELS, []); // [{id, title, formula}]
+  let customVars = load(KEY_CUSTOM_VARS, []);     // [{id, name, formula}] — formula can use sum/pass/bonus/net + earlier variables
+  let customPanels = load(KEY_CUSTOM_PANELS, []); // [{id, title, isPeriod, open, items:[{id,label,formula}]}]
   let periodUndoPrev = null; // in-memory only — powers the "Undo" on the reset toast
-  let periodPanelOpen = false;
+
+  // ---- migrate older data shapes, and make sure the built-in Period Summary
+  // panel always exists (it replaces what used to be a separate, hardcoded
+  // "period summary" UI — same since/until/reset logic, just modeled as the
+  // first panel so it can live alongside custom panels below the calculator) ----
+  function migrateVarsAndPanels(){
+    let changed = false;
+    customVars.forEach(v=>{
+      if(v.formula===undefined){
+        v.formula = (v.value!==undefined && v.value!==null) ? String(v.value) : '0';
+        delete v.value;
+        changed = true;
+      }
+    });
+    customPanels.forEach(p=>{
+      if(!Array.isArray(p.items)){
+        p.items = [{ id:'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), label:p.title, formula: p.formula!==undefined ? p.formula : '0' }];
+        delete p.formula;
+        changed = true;
+      }
+      if(typeof p.open !== 'boolean'){ p.open = false; changed = true; }
+    });
+    if(!customPanels.some(p=>p.isPeriod)){
+      customPanels.unshift({
+        id:'period', title:'Period Summary', isPeriod:true, open:false,
+        items:[
+          { id:'sum',   label:customLabels.periodSumTotal,  formula:'sum' },
+          { id:'pass',  label:customLabels.periodPassTotal, formula:'pass' },
+          { id:'bonus', label:customLabels.periodBonus,     formula:'bonus' },
+          { id:'net',   label:customLabels.periodNetTotal,  formula:'net' }
+        ]
+      });
+      changed = true;
+    }
+    if(changed){ save(KEY_CUSTOM_VARS, customVars); save(KEY_CUSTOM_PANELS, customPanels); }
+  }
+  migrateVarsAndPanels();
   const headerGrid = document.getElementById('headerGrid');
   const rearrangeHeaderBtn = document.getElementById('rearrangeHeaderBtn');
   const rearrangeHeaderLabel = document.getElementById('rearrangeHeaderLabel');
@@ -204,7 +240,8 @@
         save(KEY_CUSTOM_VARS, customVars); save(KEY_CUSTOM_PANELS, customPanels);
         localStorage.setItem(KEY_LOCAL_UPDATED, row.updated_at);
         activeFriend = friends[0] || null;
-        syncCustomPanelWidgets();
+        migrateVarsAndPanels();
+        stripLegacyPanelWidgets();
         safeRenderAll();
         setSyncStatus('saved');
       } else {
@@ -228,7 +265,6 @@
     try{ fn(); }catch(err){ console.error('[toolbox] render step failed:', err); }
   }
   function safeRenderAll(){
-    safeStep(syncCustomPanelWidgets);
     safeStep(applyLabels);
     safeStep(renderFriends);
     safeStep(updateActiveLabel);
@@ -438,7 +474,13 @@
   function buildFormulaScope(totals){
     const t = totals || computePeriodTotalsSafe();
     const scope = { sum: t.sum, pass: t.pass, bonus: t.bonus, net: t.net };
-    customVars.forEach(v=>{ scope[v.name] = Number(v.value) || 0; });
+    // built up in order, so each variable's formula can use sum/pass/bonus/net
+    // plus any variable defined before it (chaining) — a variable referencing
+    // itself or one defined later will simply fail to resolve and fall back to 0.
+    customVars.forEach(v=>{
+      try{ scope[v.name] = evaluateFormula(v.formula, scope); }
+      catch(e){ scope[v.name] = 0; }
+    });
     return scope;
   }
   // computePeriodTotals() is defined further down (period summary section); this
@@ -668,16 +710,9 @@
         <input id="lblEntryDate" maxlength="24" value="${escapeHtml(customLabels.entryDate)}" placeholder="Leave blank to hide">
         <label>Edit Layout button text</label>
         <input id="lblEditLayout" maxlength="24" value="${escapeHtml(customLabels.editLayout)}" placeholder="Leave blank to hide">
-        <label>"Sum Total" name (period summary)</label>
-        <input id="lblPeriodSum" maxlength="24" value="${escapeHtml(customLabels.periodSumTotal)}" placeholder="e.g. Sum Total">
-        <label>"Pass Total" name (period summary)</label>
-        <input id="lblPeriodPass" maxlength="24" value="${escapeHtml(customLabels.periodPassTotal)}" placeholder="e.g. Pass Total">
-        <label>"Bonus" name (period summary)</label>
-        <input id="lblPeriodBonus" maxlength="24" value="${escapeHtml(customLabels.periodBonus)}" placeholder="e.g. Bonus">
-        <label>"Net Total" name (period summary)</label>
-        <input id="lblPeriodNet" maxlength="24" value="${escapeHtml(customLabels.periodNetTotal)}" placeholder="e.g. Net Total">
-        <label>Bonus percentage (of Sum Total)</label>
+        <label>Bonus percentage (used by the "bonus" value in panels)</label>
         <input id="lblBonusPct" type="number" min="0" max="100" step="0.1" value="${bonusPct}">
+        <p style="margin:2px 0 0; font-size:11.5px; color:var(--text-dim);">Card labels &amp; formulas for Period Summary and other panels are edited from the "Panels" button, right next to each panel below the calculator.</p>
         <div class="modal-actions">
           <button class="cancel" id="mCancel">Cancel</button>
           <button class="confirm" id="mSave">Save</button>
@@ -690,10 +725,6 @@
       customLabels.loggingFor = document.getElementById('lblLoggingFor').value;
       customLabels.entryDate = document.getElementById('lblEntryDate').value;
       customLabels.editLayout = document.getElementById('lblEditLayout').value;
-      customLabels.periodSumTotal = document.getElementById('lblPeriodSum').value || defaultLabels.periodSumTotal;
-      customLabels.periodPassTotal = document.getElementById('lblPeriodPass').value || defaultLabels.periodPassTotal;
-      customLabels.periodBonus = document.getElementById('lblPeriodBonus').value || defaultLabels.periodBonus;
-      customLabels.periodNetTotal = document.getElementById('lblPeriodNet').value || defaultLabels.periodNetTotal;
       const pctVal = parseFloat(document.getElementById('lblBonusPct').value);
       bonusPct = isNaN(pctVal) ? bonusPct : pctVal;
       save(KEY_LABELS, customLabels);
@@ -750,11 +781,10 @@
   })();
 
   // ---------- period summary (running totals since the last reset) ----------
-  const periodToggleBtn = document.getElementById('periodToggleBtn');
-  const periodPanel = document.getElementById('periodPanel');
-  const periodSinceText = document.getElementById('periodSinceText');
-  const periodUntilText = document.getElementById('periodUntilText');
-  const periodStatsRow = document.getElementById('periodStatsRow');
+  // NOTE: the underlying since/until/reset math below is unchanged from
+  // before — only how its 4 cards are displayed/edited has moved into the
+  // generic panel system.
+  const panelsWrap = document.getElementById('panelsWrap');
 
   function formatPeriodDateTime(ts){
     return new Date(ts).toLocaleString(undefined, {
@@ -777,44 +807,136 @@
     return { sum, pass, bonus, net };
   }
 
-  function renderPeriodPanel(){
-    if(!periodSinceText) return; // guard in case this tool's DOM isn't in this tab
-    periodSinceText.innerHTML = 'Since <b>' + escapeHtml(formatPeriodDateTime(periodStart)) + '</b>';
-    if(periodUntilText){
-      periodUntilText.innerHTML = periodEnd != null
-        ? 'Until <b>' + escapeHtml(formatPeriodDateTime(periodEnd)) + '</b>'
-        : 'Until <b>now</b> (ongoing)';
-    }
-    const t = computePeriodTotals();
-    updateCustomPanelValues(t);
-    if(!periodPanelOpen) return; // no need to recompute the visible stat row while the panel is collapsed
-    const netCls = t.net > 0 ? 'pos' : (t.net < 0 ? 'neg' : '');
-    const netTxt = t.net > 0 ? ('+' + t.net) : String(t.net);
-    periodStatsRow.innerHTML = `
-      <div class="stat-card">
-        <div class="stat-value">${t.sum}</div>
-        <div class="stat-label">${escapeHtml(customLabels.periodSumTotal)}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">${t.pass}</div>
-        <div class="stat-label">${escapeHtml(customLabels.periodPassTotal)}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">${t.bonus}</div>
-        <div class="stat-label">${escapeHtml(customLabels.periodBonus)} (${bonusPct}%)</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value ${netCls}">${netTxt}</div>
-        <div class="stat-label">${escapeHtml(customLabels.periodNetTotal)}</div>
-      </div>`;
+  // ---------- unified panels (Period Summary + custom panels) — collapsible
+  // sections rendered below the calculator, each holding its own row of
+  // formula-driven stat cards ----------
+  const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+  const ICON_DELETE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12"/></svg>';
+  const ICON_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>';
+  const ICON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+  const RESERVED_NAMES = ['sum','pass','bonus','net'];
+
+  // last formula <input>/<textarea> the user focused inside a manager modal —
+  // lets the token chips insert into "wherever you were typing"
+  let lastFocusedFormulaInput = null;
+  function insertTokenIntoFocused(token){
+    const el = lastFocusedFormulaInput;
+    if(!el || !document.body.contains(el)) return;
+    const start = el.selectionStart!=null ? el.selectionStart : el.value.length;
+    const end = el.selectionEnd!=null ? el.selectionEnd : el.value.length;
+    const val = el.value;
+    el.value = val.slice(0,start) + token + val.slice(end);
+    const pos = start + token.length;
+    el.focus();
+    try{ el.setSelectionRange(pos,pos); }catch(e){}
+    el.dispatchEvent(new Event('input', {bubbles:true}));
   }
 
-  periodToggleBtn.addEventListener('click', ()=>{
-    periodPanelOpen = !periodPanelOpen;
-    periodToggleBtn.classList.toggle('open', periodPanelOpen);
-    periodPanel.style.display = periodPanelOpen ? '' : 'none';
-    renderPeriodPanel();
-  });
+  function renderPeriodPanel(){
+    if(!panelsWrap) return; // guard in case this tool's DOM isn't in this tab
+    const totals = computePeriodTotals();
+    const scope = buildFormulaScope(totals);
+    panelsWrap.innerHTML = '';
+
+    customPanels.forEach(p=>{
+      const section = document.createElement('div');
+      section.className = 'panel-section';
+
+      const toggleRow = document.createElement('div');
+      toggleRow.className = 'panel-toggle-row';
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'period-toggle-btn' + (p.open ? ' open' : '');
+      toggleBtn.innerHTML = `<span>${escapeHtml(p.title || 'Panel')}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+      toggleBtn.addEventListener('click', ()=>{
+        p.open = !p.open;
+        save(KEY_CUSTOM_PANELS, customPanels);
+        renderPeriodPanel();
+      });
+      const editBtn = document.createElement('button');
+      editBtn.className = 'panel-edit-btn';
+      editBtn.title = 'Edit this panel';
+      editBtn.innerHTML = ICON_EDIT;
+      editBtn.addEventListener('click', ()=> openPanelsModal(p.id));
+      toggleRow.appendChild(toggleBtn);
+      toggleRow.appendChild(editBtn);
+      section.appendChild(toggleRow);
+
+      if(p.open){
+        const body = document.createElement('div');
+        body.className = 'period-panel';
+
+        if(p.isPeriod){
+          const sinceRow = document.createElement('div');
+          sinceRow.className = 'period-since-row';
+          sinceRow.innerHTML = `<div class="period-since">Since <b>${escapeHtml(formatPeriodDateTime(periodStart))}</b></div>
+            <button class="mini-btn" data-act="editStart">${ICON_EDIT}<span>Edit start</span></button>`;
+          body.appendChild(sinceRow);
+          const untilRow = document.createElement('div');
+          untilRow.className = 'period-since-row';
+          untilRow.innerHTML = `<div class="period-since">${periodEnd != null ? ('Until <b>' + escapeHtml(formatPeriodDateTime(periodEnd)) + '</b>') : 'Until <b>now</b> (ongoing)'}</div>
+            <button class="mini-btn" data-act="editEnd">${ICON_EDIT}<span>Edit end</span></button>`;
+          body.appendChild(untilRow);
+        }
+
+        const statsRow = document.createElement('div');
+        statsRow.className = 'stats-row' + (p.isPeriod ? ' period-stats' : '');
+        const items = p.items || [];
+        if(!items.length){
+          statsRow.innerHTML = '<div class="manager-hint">No cards yet — tap the pencil above to add some.</div>';
+        } else {
+          items.forEach(item=>{
+            const card = document.createElement('div');
+            card.className = 'stat-card';
+            const isNet = item.id === 'net';
+            let labelSuffix = '';
+            if(item.formula && item.formula.trim().toLowerCase()==='bonus') labelSuffix = ' (' + bonusPct + '%)';
+            try{
+              const v = round2(evaluateFormula(item.formula, scope));
+              if(isNet){
+                const cls = v>0?'pos':(v<0?'neg':'');
+                card.innerHTML = `<div class="stat-value${cls?(' '+cls):''}">${v>0?('+'+v):v}</div><div class="stat-label">${escapeHtml(item.label||'')}${labelSuffix}</div>`;
+              } else {
+                card.innerHTML = `<div class="stat-value">${v}</div><div class="stat-label">${escapeHtml(item.label||'')}${labelSuffix}</div>`;
+              }
+            }catch(err){
+              card.classList.add('error');
+              card.innerHTML = `<div class="stat-value">Err</div><div class="stat-label">${escapeHtml(item.label||'')}</div>`;
+            }
+            statsRow.appendChild(card);
+          });
+        }
+        body.appendChild(statsRow);
+
+        if(p.isPeriod){
+          const actions = document.createElement('div');
+          actions.className = 'period-actions';
+          actions.innerHTML = `<button class="tool-btn accent" data-act="reset">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+            Reset period</button>`;
+          body.appendChild(actions);
+        }
+
+        section.appendChild(body);
+
+        if(p.isPeriod){
+          body.querySelector('[data-act="editStart"]').addEventListener('click', ()=> openPeriodStartModal('edit'));
+          body.querySelector('[data-act="editEnd"]').addEventListener('click', ()=> openPeriodStartModal('editEnd'));
+          body.querySelector('[data-act="reset"]').addEventListener('click', ()=> openPeriodStartModal('reset'));
+        }
+      }
+
+      panelsWrap.appendChild(section);
+    });
+
+    const addRow = document.createElement('div');
+    addRow.className = 'add-panel-row';
+    addRow.innerHTML = `<button class="tool-btn accent" id="addPanelBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Add panel</button>`;
+    panelsWrap.appendChild(addRow);
+    document.getElementById('addPanelBtn').addEventListener('click', ()=> openPanelsModal('__new__'));
+  }
 
   function toLocalDatetimeInputValue(ts){
     const d = new Date(ts);
@@ -826,6 +948,7 @@
     // mode: 'reset' (defaults the picker to "now", touches the running Undo),
     // 'edit' (start date, defaults to the current start), or
     // 'editEnd' (end date, defaults to current end or now; can be cleared to open-ended)
+    // — unchanged from before; since/until behavior stays exactly as it was.
     const isReset = mode === 'reset';
     const isEnd = mode === 'editEnd';
     const defaultTs = isReset ? Date.now() : (isEnd ? (periodEnd != null ? periodEnd : Date.now()) : periodStart);
@@ -909,30 +1032,31 @@
     });
   }
 
-  document.getElementById('periodResetBtn').addEventListener('click', ()=> openPeriodStartModal('reset'));
-  document.getElementById('periodEditStartBtn').addEventListener('click', ()=> openPeriodStartModal('edit'));
-  document.getElementById('periodEditEndBtn').addEventListener('click', ()=> openPeriodStartModal('editEnd'));
-
-  // ---------- custom variables (named numbers usable inside custom panel formulas) ----------
-  const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
-  const ICON_DELETE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12"/></svg>';
-  const RESERVED_NAMES = ['sum','pass','bonus','net'];
+  // ---------- custom variables (named formulas usable anywhere — inside
+  // panel cards, or inside other variables) ----------
   let editingVarId = null;
 
   function openVarsModal(){
     editingVarId = null;
+    renderVarsModalBody();
+  }
+
+  function renderVarsModalBody(){
     modalRoot.innerHTML = '';
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
+    const editingVar = customVars.find(v=>v.id===editingVarId);
     overlay.innerHTML = `
       <div class="modal-card">
         <h3>Your variables</h3>
-        <p>Plain numbers you can use inside custom panel formulas — a rate, a fee, a percentage. Reference them by name (not case-sensitive).</p>
+        <p>Formulas you can name and reuse anywhere — in panel cards, or in other variables. They can use <code>sum</code>, <code>pass</code>, <code>bonus</code>, <code>net</code>, and any variable defined above them in the list.</p>
         <div class="manager-list" id="varsList"></div>
         <div class="manager-form">
-          <input type="text" id="varNameInput" placeholder="Name, e.g. rate" maxlength="40">
-          <input type="number" step="any" id="varValueInput" placeholder="Value, e.g. 4">
-          <button class="confirm" id="varSaveBtn">Add variable</button>
+          <input type="text" id="varNameInput" placeholder="Name, e.g. total" maxlength="40" value="${editingVar?escapeHtml(editingVar.name):''}">
+          <textarea id="varFormulaInput" placeholder="Formula, e.g. sum + pass">${editingVar?escapeHtml(editingVar.formula):''}</textarea>
+          <div class="token-chip-row" id="varTokenChipRow"></div>
+          <div class="manager-formula-preview" id="varFormulaPreview">&nbsp;</div>
+          <button class="confirm" id="varSaveBtn">${editingVar?'Save changes':'Add variable'}</button>
         </div>
         <div class="modal-actions">
           <button class="cancel" id="mClose">Close</button>
@@ -942,7 +1066,32 @@
     document.getElementById('mClose').addEventListener('click', ()=> modalRoot.innerHTML='');
     overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
     renderVarsList();
+    renderVarTokenChips();
+    const formulaInput = document.getElementById('varFormulaInput');
+    lastFocusedFormulaInput = formulaInput;
+    formulaInput.addEventListener('focus', ()=> lastFocusedFormulaInput = formulaInput);
+    formulaInput.addEventListener('input', validateVarFormulaLive);
     document.getElementById('varSaveBtn').addEventListener('click', saveVarFromForm);
+    validateVarFormulaLive();
+  }
+
+  function renderVarTokenChips(){
+    const row = document.getElementById('varTokenChipRow');
+    if(!row) return;
+    // a variable being added goes to the end of the list, so it may use every
+    // existing variable plus the reserved totals; a variable being edited may
+    // only use names that come before its current position (to avoid cycles)
+    let usable;
+    if(editingVarId){
+      const idx = customVars.findIndex(v=>v.id===editingVarId);
+      usable = RESERVED_NAMES.concat(customVars.slice(0, idx).map(v=>v.name));
+    } else {
+      usable = RESERVED_NAMES.concat(customVars.map(v=>v.name));
+    }
+    row.innerHTML = usable.map(t=>`<button type="button" class="token-chip" data-token="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('');
+    row.querySelectorAll('.token-chip').forEach(chip=>{
+      chip.addEventListener('click', ()=> insertTokenIntoFocused(chip.dataset.token));
+    });
   }
 
   function renderVarsList(){
@@ -953,101 +1102,300 @@
       return;
     }
     list.innerHTML = '';
-    customVars.forEach(v=>{
+    customVars.forEach((v,idx)=>{
       const row = document.createElement('div');
       row.className = 'manager-row';
       row.innerHTML = `
+        <div class="reorder-col">
+          <button class="reorder-btn" data-act="up" ${idx===0?'disabled':''} title="Move up">${ICON_UP}</button>
+          <button class="reorder-btn" data-act="down" ${idx===customVars.length-1?'disabled':''} title="Move down">${ICON_DOWN}</button>
+        </div>
         <div class="manager-row-main">
           <div class="manager-row-title">${escapeHtml(v.name)}</div>
-          <div class="manager-row-sub">= ${v.value}</div>
+          <div class="manager-row-sub">= ${escapeHtml(v.formula)}</div>
         </div>
         <div class="manager-row-actions">
-          <button class="manager-icon-btn" title="Edit">${ICON_EDIT}</button>
-          <button class="manager-icon-btn danger" title="Delete">${ICON_DELETE}</button>
+          <button class="manager-icon-btn" data-act="edit" title="Edit">${ICON_EDIT}</button>
+          <button class="manager-icon-btn danger" data-act="del" title="Delete">${ICON_DELETE}</button>
         </div>`;
-      row.querySelector('.manager-icon-btn:not(.danger)').addEventListener('click', ()=>{
+      row.querySelector('[data-act="edit"]').addEventListener('click', ()=>{
         editingVarId = v.id;
-        document.getElementById('varNameInput').value = v.name;
-        document.getElementById('varValueInput').value = v.value;
-        document.getElementById('varSaveBtn').textContent = 'Save changes';
+        renderVarsModalBody();
       });
-      row.querySelector('.manager-icon-btn.danger').addEventListener('click', ()=>{
+      row.querySelector('[data-act="del"]').addEventListener('click', ()=>{
         customVars = customVars.filter(x=>x.id!==v.id);
         save(KEY_CUSTOM_VARS, customVars);
-        renderVarsList();
-        updateCustomPanelValues();
+        renderVarsModalBody();
+        renderPeriodPanel();
         showToast('Variable deleted');
       });
+      row.querySelector('[data-act="up"]').addEventListener('click', ()=> moveVar(v.id, -1));
+      row.querySelector('[data-act="down"]').addEventListener('click', ()=> moveVar(v.id, 1));
       list.appendChild(row);
     });
   }
 
+  function moveVar(id, dir){
+    const idx = customVars.findIndex(v=>v.id===id);
+    const swapIdx = idx+dir;
+    if(idx<0 || swapIdx<0 || swapIdx>=customVars.length) return;
+    const tmp = customVars[idx]; customVars[idx]=customVars[swapIdx]; customVars[swapIdx]=tmp;
+    save(KEY_CUSTOM_VARS, customVars);
+    renderVarsModalBody();
+    renderPeriodPanel();
+  }
+
+  // scope visible to a variable sitting at array position `idx` (only
+  // reserved names + variables strictly before it — keeps evaluation order
+  // well-defined and prevents cycles)
+  function scopeForVarPosition(idx){
+    const t = computePeriodTotalsSafe();
+    const scope = { sum:t.sum, pass:t.pass, bonus:t.bonus, net:t.net };
+    customVars.slice(0, idx).forEach(v=>{
+      try{ scope[v.name] = evaluateFormula(v.formula, scope); }catch(e){ scope[v.name] = 0; }
+    });
+    return scope;
+  }
+
+  function validateVarFormulaLive(){
+    const preview = document.getElementById('varFormulaPreview');
+    const saveBtn = document.getElementById('varSaveBtn');
+    const formulaInput = document.getElementById('varFormulaInput');
+    if(!preview || !saveBtn || !formulaInput) return;
+    const formula = formulaInput.value.trim();
+    if(!formula){ preview.innerHTML = '&nbsp;'; preview.className = 'manager-formula-preview'; saveBtn.disabled = true; return; }
+    const idx = editingVarId ? customVars.findIndex(v=>v.id===editingVarId) : customVars.length;
+    try{
+      const v = evaluateFormula(formula, scopeForVarPosition(idx));
+      preview.textContent = '= ' + round2(v) + ' (right now)';
+      preview.className = 'manager-formula-preview ok';
+      saveBtn.disabled = false;
+    }catch(err){
+      preview.textContent = err.message;
+      preview.className = 'manager-formula-preview err';
+      saveBtn.disabled = true;
+    }
+  }
+
   function saveVarFromForm(){
     const nameInput = document.getElementById('varNameInput');
-    const valueInput = document.getElementById('varValueInput');
+    const formulaInput = document.getElementById('varFormulaInput');
     const name = nameInput.value.trim();
-    const value = parseFloat(valueInput.value);
+    const formula = formulaInput.value.trim();
     if(!name){ showToast('Give the variable a name'); return; }
     if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)){ showToast('Use letters/numbers/underscore, starting with a letter'); return; }
-    if(isNaN(value)){ showToast('Enter a numeric value'); return; }
+    if(!formula){ showToast('Give it a formula'); return; }
     if(RESERVED_NAMES.includes(name.toLowerCase())){ showToast('"'+name+'" is reserved — try another name'); return; }
     const dup = customVars.find(v=> v.name.toLowerCase()===name.toLowerCase() && v.id!==editingVarId);
     if(dup){ showToast('That name is already used'); return; }
+    const idx = editingVarId ? customVars.findIndex(v=>v.id===editingVarId) : customVars.length;
+    try{ evaluateFormula(formula, scopeForVarPosition(idx)); }
+    catch(err){ showToast('Fix the formula first: ' + err.message); return; }
     if(editingVarId){
       const v = customVars.find(x=>x.id===editingVarId);
-      if(v){ v.name = name; v.value = value; }
+      if(v){ v.name = name; v.formula = formula; }
       editingVarId = null;
-      document.getElementById('varSaveBtn').textContent = 'Add variable';
     } else {
-      customVars.push({ id: 'v'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name, value });
+      customVars.push({ id: 'v'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name, formula });
     }
     save(KEY_CUSTOM_VARS, customVars);
-    nameInput.value = ''; valueInput.value = '';
-    renderVarsList();
-    updateCustomPanelValues();
+    renderVarsModalBody();
+    renderPeriodPanel();
     showToast('Variable saved');
   }
 
   document.getElementById('manageVarsBtn').addEventListener('click', openVarsModal);
 
-  // ---------- custom summary panels (your own formula, shown as a draggable header tile) ----------
-  let editingPanelId = null;
+  // ---------- custom summary panels (Period Summary is the built-in first
+  // one; others are yours) — each panel is a collapsible section below the
+  // calculator holding a row of formula-driven stat cards ----------
+  let managePanelsFocusId = null; // null = top-level panel list, '__new__' = creating one, or a panel id = editing its cards
+  let editingItemId = null;
 
-  function openPanelsModal(){
-    editingPanelId = null;
+  function openPanelsModal(focusId){
+    managePanelsFocusId = (focusId === '__new__') ? '__new__' : (customPanels.some(p=>p.id===focusId) ? focusId : null);
+    editingItemId = null;
+    renderPanelsModalBody();
+  }
+
+  function renderPanelsModalBody(){
     modalRoot.innerHTML = '';
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
+
+    if(managePanelsFocusId === '__new__'){
+      overlay.innerHTML = `
+        <div class="modal-card">
+          <h3>New panel</h3>
+          <p>Give it a name — you'll add stat cards to it next.</p>
+          <div class="manager-form">
+            <input type="text" id="newPanelTitle" placeholder="Title, e.g. Take-home" maxlength="40">
+            <button class="confirm" id="newPanelCreateBtn">Create</button>
+          </div>
+          <div class="modal-actions">
+            <button class="cancel" id="mClose">Cancel</button>
+          </div>
+        </div>`;
+      modalRoot.appendChild(overlay);
+      document.getElementById('mClose').addEventListener('click', ()=> modalRoot.innerHTML='');
+      overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+      document.getElementById('newPanelCreateBtn').addEventListener('click', ()=>{
+        const title = document.getElementById('newPanelTitle').value.trim();
+        if(!title){ showToast('Give the panel a title'); return; }
+        const p = { id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), title, isPeriod:false, open:true, items:[] };
+        customPanels.push(p);
+        save(KEY_CUSTOM_PANELS, customPanels);
+        renderPeriodPanel();
+        managePanelsFocusId = p.id;
+        renderPanelsModalBody();
+      });
+      return;
+    }
+
+    const focusPanel = customPanels.find(p=>p.id===managePanelsFocusId);
+    if(!focusPanel){
+      const rows = customPanels.map(p=>`
+        <div class="manager-row" data-id="${p.id}">
+          <div class="manager-row-main">
+            <div class="manager-row-title">${escapeHtml(p.title||'Panel')}${p.isPeriod?'<span class="built-in-badge">Built-in</span>':''}</div>
+            <div class="manager-row-sub">${(p.items||[]).length} card${(p.items||[]).length===1?'':'s'}</div>
+          </div>
+          <div class="manager-row-actions">
+            <button class="manager-icon-btn" data-act="edit" title="Edit">${ICON_EDIT}</button>
+            ${p.isPeriod ? '' : `<button class="manager-icon-btn danger" data-act="del" title="Delete">${ICON_DELETE}</button>`}
+          </div>
+        </div>`).join('');
+      overlay.innerHTML = `
+        <div class="modal-card">
+          <h3>Panels</h3>
+          <p>Shown as collapsible sections below the calculator. Tap Edit to rename a panel or add/change its stat cards.</p>
+          <div class="manager-list" id="panelsList">${customPanels.length ? rows : '<div class="manager-hint">No panels yet.</div>'}</div>
+          <button class="confirm" id="addPanelFromModalBtn">+ Add panel</button>
+          <div class="modal-actions">
+            <button class="cancel" id="mClose">Close</button>
+          </div>
+        </div>`;
+      modalRoot.appendChild(overlay);
+      document.getElementById('mClose').addEventListener('click', ()=> modalRoot.innerHTML='');
+      overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
+      document.getElementById('addPanelFromModalBtn').addEventListener('click', ()=>{ managePanelsFocusId = '__new__'; renderPanelsModalBody(); });
+      overlay.querySelectorAll('.manager-row').forEach(row=>{
+        const id = row.dataset.id;
+        const editBtn = row.querySelector('[data-act="edit"]');
+        if(editBtn) editBtn.addEventListener('click', ()=>{ managePanelsFocusId = id; editingItemId = null; renderPanelsModalBody(); });
+        const delBtn = row.querySelector('[data-act="del"]');
+        if(delBtn) delBtn.addEventListener('click', ()=>{
+          customPanels = customPanels.filter(x=>x.id!==id);
+          save(KEY_CUSTOM_PANELS, customPanels);
+          renderPeriodPanel();
+          renderPanelsModalBody();
+          showToast('Panel deleted');
+        });
+      });
+      return;
+    }
+
+    // ---- editing focusPanel's title + cards ----
     const availableTokens = RESERVED_NAMES.concat(customVars.map(v=>v.name));
+    const items = focusPanel.items || [];
+    const itemRows = items.map((it,idx)=>`
+      <div class="manager-row" data-id="${it.id}">
+        <div class="reorder-col">
+          <button class="reorder-btn" data-act="up" ${idx===0?'disabled':''} title="Move up">${ICON_UP}</button>
+          <button class="reorder-btn" data-act="down" ${idx===items.length-1?'disabled':''} title="Move down">${ICON_DOWN}</button>
+        </div>
+        <div class="manager-row-main">
+          <div class="manager-row-title">${escapeHtml(it.label||'')}</div>
+          <div class="manager-row-sub">${escapeHtml(it.formula)}</div>
+        </div>
+        <div class="manager-row-actions">
+          <button class="manager-icon-btn" data-act="edit" title="Edit">${ICON_EDIT}</button>
+          <button class="manager-icon-btn danger" data-act="del" title="Delete">${ICON_DELETE}</button>
+        </div>
+      </div>`).join('');
+    const editingItem = items.find(x=>x.id===editingItemId);
     overlay.innerHTML = `
       <div class="modal-card">
-        <h3>Custom panels</h3>
-        <p>Build your own summary tile with a formula. It shows up as a tile you can drag/resize (turn on Rearrange to move it).</p>
-        <div class="manager-list" id="panelsList"></div>
+        <button class="cancel" id="mBack" style="margin-bottom:10px;">‹ Back to panels</button>
+        <h3>${escapeHtml(focusPanel.title||'Panel')}${focusPanel.isPeriod?'<span class="built-in-badge">Built-in</span>':''}</h3>
+        ${focusPanel.isPeriod ? '<p>Since/until and reset stay controlled from the panel itself, below the calculator. Here you can relabel or re-formula its cards, and add more.</p>' : "<p>Add stat cards with your own formulas. Tap a token below to insert it wherever you're typing.</p>"}
+        <label>Panel title</label>
+        <input type="text" id="panelTitleInput" maxlength="40" value="${escapeHtml(focusPanel.title||'')}">
+        <div class="manager-list" id="itemsList" style="margin-top:10px;">${items.length ? itemRows : '<div class="manager-hint">No cards yet — add one below.</div>'}</div>
         <div class="manager-form">
-          <input type="text" id="panelTitleInput" placeholder="Title, e.g. Take-home" maxlength="40">
-          <textarea id="panelFormulaInput" placeholder="Formula, e.g. sum - pass - sum*rate"></textarea>
-          <div class="manager-hint">Available: ${availableTokens.map(t=>'<code>'+escapeHtml(t)+'</code>').join(' ')}</div>
-          <div class="manager-formula-preview" id="panelFormulaPreview">&nbsp;</div>
-          <button class="confirm" id="panelSaveBtn" disabled>Add panel</button>
+          <input type="text" id="itemLabelInput" placeholder="Card label, e.g. Take-home" maxlength="30" value="${editingItem?escapeHtml(editingItem.label):''}">
+          <textarea id="itemFormulaInput" placeholder="Formula, e.g. sum - pass - sum*rate">${editingItem?escapeHtml(editingItem.formula):''}</textarea>
+          <div class="token-chip-row" id="tokenChipRow">${availableTokens.map(t=>`<button type="button" class="token-chip" data-token="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('')}</div>
+          <div class="manager-formula-preview" id="itemFormulaPreview">&nbsp;</div>
+          <button class="confirm" id="itemSaveBtn">${editingItem?'Save changes':'Add card'}</button>
         </div>
         <div class="modal-actions">
           <button class="cancel" id="mClose">Close</button>
+          ${focusPanel.isPeriod ? '' : `<button class="confirm danger" id="mDeletePanel">Delete panel</button>`}
         </div>
       </div>`;
     modalRoot.appendChild(overlay);
     document.getElementById('mClose').addEventListener('click', ()=> modalRoot.innerHTML='');
     overlay.addEventListener('click', (e)=>{ if(e.target===overlay) modalRoot.innerHTML=''; });
-    renderPanelsList();
-    document.getElementById('panelFormulaInput').addEventListener('input', validatePanelFormulaLive);
-    document.getElementById('panelSaveBtn').addEventListener('click', savePanelFromForm);
+    document.getElementById('mBack').addEventListener('click', ()=>{ managePanelsFocusId=null; editingItemId=null; renderPanelsModalBody(); });
+    const delPanelBtn = document.getElementById('mDeletePanel');
+    if(delPanelBtn){
+      delPanelBtn.addEventListener('click', ()=>{
+        customPanels = customPanels.filter(x=>x.id!==focusPanel.id);
+        save(KEY_CUSTOM_PANELS, customPanels);
+        renderPeriodPanel();
+        managePanelsFocusId = null;
+        renderPanelsModalBody();
+        showToast('Panel deleted');
+      });
+    }
+    document.getElementById('panelTitleInput').addEventListener('change', (e)=>{
+      focusPanel.title = e.target.value.trim() || focusPanel.title;
+      save(KEY_CUSTOM_PANELS, customPanels);
+      renderPeriodPanel();
+    });
+    const formulaInput = document.getElementById('itemFormulaInput');
+    lastFocusedFormulaInput = formulaInput;
+    formulaInput.addEventListener('focus', ()=> lastFocusedFormulaInput = formulaInput);
+    formulaInput.addEventListener('input', validateItemFormulaLive);
+    overlay.querySelectorAll('.token-chip').forEach(chip=>{
+      chip.addEventListener('click', ()=> insertTokenIntoFocused(chip.dataset.token));
+    });
+    document.getElementById('itemSaveBtn').addEventListener('click', ()=> saveItemFromForm(focusPanel));
+    validateItemFormulaLive();
+
+    overlay.querySelectorAll('#itemsList .manager-row').forEach(row=>{
+      const id = row.dataset.id;
+      row.querySelector('[data-act="edit"]').addEventListener('click', ()=>{ editingItemId = id; renderPanelsModalBody(); });
+      row.querySelector('[data-act="del"]').addEventListener('click', ()=>{
+        focusPanel.items = focusPanel.items.filter(x=>x.id!==id);
+        save(KEY_CUSTOM_PANELS, customPanels);
+        renderPeriodPanel();
+        renderPanelsModalBody();
+      });
+      const upBtn = row.querySelector('[data-act="up"]');
+      const downBtn = row.querySelector('[data-act="down"]');
+      if(upBtn) upBtn.addEventListener('click', ()=> moveItem(focusPanel, id, -1));
+      if(downBtn) downBtn.addEventListener('click', ()=> moveItem(focusPanel, id, 1));
+    });
   }
 
-  function validatePanelFormulaLive(){
-    const preview = document.getElementById('panelFormulaPreview');
-    const saveBtn = document.getElementById('panelSaveBtn');
-    if(!preview || !saveBtn) return;
-    const formula = document.getElementById('panelFormulaInput').value.trim();
+  function moveItem(panel, id, dir){
+    const idx = panel.items.findIndex(x=>x.id===id);
+    const swapIdx = idx+dir;
+    if(idx<0 || swapIdx<0 || swapIdx>=panel.items.length) return;
+    const tmp = panel.items[idx]; panel.items[idx]=panel.items[swapIdx]; panel.items[swapIdx]=tmp;
+    save(KEY_CUSTOM_PANELS, customPanels);
+    renderPeriodPanel();
+    renderPanelsModalBody();
+  }
+
+  function validateItemFormulaLive(){
+    const preview = document.getElementById('itemFormulaPreview');
+    const saveBtn = document.getElementById('itemSaveBtn');
+    const formulaInput = document.getElementById('itemFormulaInput');
+    if(!preview || !saveBtn || !formulaInput) return;
+    const formula = formulaInput.value.trim();
     if(!formula){ preview.innerHTML = '&nbsp;'; preview.className = 'manager-formula-preview'; saveBtn.disabled = true; return; }
     try{
       const v = evaluateFormula(formula, buildFormulaScope());
@@ -1061,71 +1409,29 @@
     }
   }
 
-  function renderPanelsList(){
-    const list = document.getElementById('panelsList');
-    if(!list) return;
-    if(!customPanels.length){
-      list.innerHTML = '<div class="manager-hint">No custom panels yet — add one below.</div>';
-      return;
-    }
-    list.innerHTML = '';
-    customPanels.forEach(p=>{
-      const row = document.createElement('div');
-      row.className = 'manager-row';
-      row.innerHTML = `
-        <div class="manager-row-main">
-          <div class="manager-row-title">${escapeHtml(p.title)}</div>
-          <div class="manager-row-sub">${escapeHtml(p.formula)}</div>
-        </div>
-        <div class="manager-row-actions">
-          <button class="manager-icon-btn" title="Edit">${ICON_EDIT}</button>
-          <button class="manager-icon-btn danger" title="Delete">${ICON_DELETE}</button>
-        </div>`;
-      row.querySelector('.manager-icon-btn:not(.danger)').addEventListener('click', ()=>{
-        editingPanelId = p.id;
-        document.getElementById('panelTitleInput').value = p.title;
-        document.getElementById('panelFormulaInput').value = p.formula;
-        document.getElementById('panelSaveBtn').textContent = 'Save changes';
-        validatePanelFormulaLive();
-      });
-      row.querySelector('.manager-icon-btn.danger').addEventListener('click', ()=>{
-        customPanels = customPanels.filter(x=>x.id!==p.id);
-        save(KEY_CUSTOM_PANELS, customPanels);
-        syncCustomPanelWidgets();
-        renderHeaderGrid();
-        renderPanelsList();
-        showToast('Panel deleted');
-      });
-      list.appendChild(row);
-    });
-  }
-
-  function savePanelFromForm(){
-    const titleInput = document.getElementById('panelTitleInput');
-    const formulaInput = document.getElementById('panelFormulaInput');
-    const title = titleInput.value.trim();
+  function saveItemFromForm(panel){
+    const labelInput = document.getElementById('itemLabelInput');
+    const formulaInput = document.getElementById('itemFormulaInput');
+    const label = labelInput.value.trim();
     const formula = formulaInput.value.trim();
-    if(!title){ showToast('Give the panel a title'); return; }
+    if(!label){ showToast('Give the card a label'); return; }
     try{ evaluateFormula(formula, buildFormulaScope()); }
     catch(err){ showToast('Fix the formula first: ' + err.message); return; }
-    if(editingPanelId){
-      const p = customPanels.find(x=>x.id===editingPanelId);
-      if(p){ p.title = title; p.formula = formula; }
-      editingPanelId = null;
-      document.getElementById('panelSaveBtn').textContent = 'Add panel';
+    if(editingItemId){
+      const it = panel.items.find(x=>x.id===editingItemId);
+      if(it){ it.label = label; it.formula = formula; }
+      editingItemId = null;
     } else {
-      customPanels.push({ id: 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), title, formula });
+      panel.items = panel.items || [];
+      panel.items.push({ id:'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), label, formula });
     }
     save(KEY_CUSTOM_PANELS, customPanels);
-    syncCustomPanelWidgets();
-    renderHeaderGrid();
-    updateCustomPanelValues();
-    titleInput.value = ''; formulaInput.value = '';
-    renderPanelsList();
-    showToast('Panel saved');
+    renderPeriodPanel();
+    renderPanelsModalBody();
+    showToast('Card saved');
   }
 
-  document.getElementById('managePanelsBtn').addEventListener('click', openPanelsModal);
+  document.getElementById('managePanelsBtn').addEventListener('click', ()=> openPanelsModal(null));
 
   editFriendsBtn.addEventListener('click', ()=>{
     friendEditMode = !friendEditMode;
@@ -1331,61 +1637,16 @@
     if(e.detail && e.detail.tool==='calclog'){ renderGrid(); renderHeaderGrid(); }
   });
 
-  // ---------- custom panel widgets (backed by customPanels[], live inside the same freeform grid) ----------
-  function customPanelWidgetId(panelId){ return 'cp_' + panelId; }
-
-  function createCustomPanelWidget(panel){
-    const el = document.createElement('div');
-    el.className = 'widget-body stat-card widget-stat';
-    el.dataset.panelId = panel.id;
-    el.innerHTML = `<div class="stat-value">—</div><div class="stat-label"></div>`;
-    widgetBodies[customPanelWidgetId(panel.id)] = el;
-    return el;
-  }
-
-  // Keeps headerLayout/widgetBodies in sync with whatever is currently in
-  // customPanels[] — adds tiles for new panels (own device or synced from
-  // another one), removes tiles for deleted panels. Safe to call any time;
-  // does nothing if everything already matches.
-  function syncCustomPanelWidgets(){
-    const validIds = new Set(customPanels.map(p=>customPanelWidgetId(p.id)));
-    // add missing widget bodies + headerLayout entries
-    customPanels.forEach(p=>{
-      const wid = customPanelWidgetId(p.id);
-      if(!widgetBodies[wid]) createCustomPanelWidget(p);
-      if(!headerLayout.some(w=>w.id===wid)){
-        headerLayout.push({ id: wid, x: 0, y: headerMaxRow(), w: 2, h: 2 });
-      }
-    });
-    // drop stale ones (panel was deleted, possibly on another device)
-    Object.keys(widgetBodies).forEach(id=>{
-      if(id.indexOf('cp_')===0 && !validIds.has(id)) delete widgetBodies[id];
-    });
+  // Panels used to live as draggable/resizable tiles inside the header grid
+  // (ids prefixed "cp_"). They've moved to their own collapsible section
+  // below the calculator, so on upgrade we just drop any leftover header
+  // tiles for them — safe to call any time, does nothing once cleaned up.
+  function stripLegacyPanelWidgets(){
     const before = headerLayout.length;
-    headerLayout = headerLayout.filter(w => w.id.indexOf('cp_')!==0 || validIds.has(w.id));
+    headerLayout = headerLayout.filter(w => w.id.indexOf('cp_')!==0);
     if(headerLayout.length !== before) save(KEY_HEADER_LAYOUT, headerLayout);
   }
-
-  function updateCustomPanelValues(totals){
-    if(!customPanels.length) return;
-    const scope = buildFormulaScope(totals);
-    customPanels.forEach(p=>{
-      const el = widgetBodies[customPanelWidgetId(p.id)];
-      if(!el) return;
-      const valueEl = el.querySelector('.stat-value');
-      const labelEl = el.querySelector('.stat-label');
-      if(labelEl) labelEl.textContent = p.title || 'Panel';
-      if(!valueEl) return;
-      try{
-        const v = evaluateFormula(p.formula, scope);
-        valueEl.textContent = round2(v);
-        el.classList.remove('error');
-      }catch(err){
-        valueEl.textContent = 'Err';
-        el.classList.add('error');
-      }
-    });
-  }
+  stripLegacyPanelWidgets();
 
   // ---------- header widget grid (freeform, draggable, resizable) ----------
   function headerColWidth(){
@@ -1915,8 +2176,9 @@
       if(typeof data.bonusPct==='number'){ bonusPct = data.bonusPct; save(KEY_BONUS_PCT, bonusPct); }
       customVars = Array.isArray(data.customVars) ? data.customVars : [];
       customPanels = Array.isArray(data.customPanels) ? data.customPanels : [];
+      migrateVarsAndPanels();
+      stripLegacyPanelWidgets();
       save(KEY_CUSTOM_VARS, customVars); save(KEY_CUSTOM_PANELS, customPanels);
-      syncCustomPanelWidgets();
       activeFriend = friends[0] || null;
       save(KEY_FRIENDS, friends);
       save(KEY_ENTRIES, entries);

@@ -549,6 +549,71 @@
     gap:8px;
     margin-bottom:10px;
   }
+  /* the buttons row itself must also wrap — without this, the parent's
+     flex-wrap has nothing to do (it only has one child) and the row of
+     mini-btns just overflows past the screen edge instead of dropping
+     to a second line. */
+  .header-toolbar-btns{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    justify-content:flex-end;
+    min-width:0;
+    max-width:100%;
+  }
+
+  /* ---- token chips (click to insert into a formula) ---- */
+  .token-chip-row{ display:flex; flex-wrap:wrap; gap:6px; margin:-2px 0 4px; }
+  .token-chip{
+    font-family:'Space Mono',monospace;
+    font-size:11px;
+    font-weight:700;
+    padding:5px 10px;
+    border-radius:8px;
+    border:none;
+    background:var(--surface);
+    box-shadow:3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
+    color:var(--accent);
+    cursor:pointer;
+  }
+  .token-chip:active{
+    box-shadow:inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+  }
+
+  /* ---- reorder (move item up/down) ---- */
+  .reorder-col{ display:flex; flex-direction:column; gap:2px; flex:none; }
+  .reorder-btn{
+    border:none; background:none; color:var(--text-dim);
+    width:22px; height:17px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; padding:0;
+  }
+  .reorder-btn:active{ color:var(--accent); }
+  .reorder-btn:disabled{ opacity:0.25; cursor:default; }
+  .reorder-btn svg{ width:13px; height:13px; }
+
+  .built-in-badge{
+    font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.04em;
+    color:var(--text-dim); background:var(--surface); padding:2px 6px; border-radius:6px;
+    margin-left:6px; vertical-align:middle;
+  }
+
+  /* ---- panel sections (Period Summary + custom panels), below the calculator ---- */
+  .panel-section{ margin-bottom:14px; }
+  .panel-toggle-row{ display:flex; align-items:center; gap:8px; }
+  .panel-toggle-row .period-toggle-btn{ flex:1 1 auto; max-width:none; }
+  .panel-edit-btn{
+    flex:none; width:38px; height:38px;
+    border:none; border-radius:11px;
+    background:var(--surface);
+    box-shadow:4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
+    color:var(--text-dim);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .panel-edit-btn:active{ color:var(--accent); }
+  .panel-edit-btn svg{ width:15px; height:15px; }
+  .add-panel-row{ display:flex; justify-content:center; margin-bottom:14px; }
   .header-grid{
     position:relative;
     margin-bottom:var(--gap-header-to-calc);

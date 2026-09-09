@@ -129,12 +129,12 @@
 
   <div id="calcPanel" style="display:none;">
     <div class="header-toolbar">
-      <div style="display:flex; gap:8px;">
+      <div class="header-toolbar-btns">
         <button class="mini-btn" id="editLabelsBtn" title="Rename or blank out labels">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           <span>Labels</span>
         </button>
-        <button class="mini-btn" id="manageVarsBtn" title="Create and edit your own numeric variables">
+        <button class="mini-btn" id="manageVarsBtn" title="Create and edit your own formula-based variables">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v4L4 12l3 4v4M17 4v4l3 4-3 4v4"/></svg>
           <span>Variables</span>
         </button>
@@ -206,35 +206,9 @@
       <select id="historyFilter">
         <option value="all">All friends</option>
       </select>
-      <button class="period-toggle-btn" id="periodToggleBtn" title="Show totals since your last reset">
-        <span id="periodToggleLabel">Period Summary</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
     </div>
 
-    <div class="period-panel" id="periodPanel" style="display:none;">
-      <div class="period-since-row">
-        <div class="period-since" id="periodSinceText">Since —</div>
-        <button class="mini-btn" id="periodEditStartBtn" title="Set a custom starting date & time">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-          <span>Edit start</span>
-        </button>
-      </div>
-      <div class="period-since-row">
-        <div class="period-since" id="periodUntilText">Until —</div>
-        <button class="mini-btn" id="periodEditEndBtn" title="Set a custom end date & time">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-          <span>Edit end</span>
-        </button>
-      </div>
-      <div class="stats-row period-stats" id="periodStatsRow"></div>
-      <div class="period-actions">
-        <button class="tool-btn accent" id="periodResetBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
-          Reset period
-        </button>
-      </div>
-    </div>
+    <div id="panelsWrap"></div>
 
     <div id="historyWrap"></div>
   </div>
