@@ -23,6 +23,15 @@
     }
   }
 
+  // Sync-state vars must exist before the very first save() call below (periodStart
+  // init can fire one immediately), otherwise scheduleSync()/setSyncStatus() hit
+  // these while still in the temporal dead zone and throw, aborting the whole script.
+  const saveStatusEl = document.getElementById('saveStatus');
+  const KEY_LOCAL_UPDATED = 'toolbox_local_updated';
+  let syncTimer = null;
+  let pendingSync = false;
+  let reconciled = false; // true once the first pull-vs-local reconcile has resolved
+
   let friends = load(KEY_FRIENDS, []);
   let activeFriend = friends[0] || null;
   let entries = load(KEY_ENTRIES, []);
@@ -156,12 +165,6 @@
   const backupBtn = document.getElementById('backupBtn');
 
   // ---------- cloud sync (Supabase) ----------
-  const saveStatusEl = document.getElementById('saveStatus');
-  const KEY_LOCAL_UPDATED = 'toolbox_local_updated';
-  let syncTimer = null;
-  let pendingSync = false;
-  let reconciled = false; // true once the first pull-vs-local reconcile has resolved
-
   function setSyncStatus(state){
     if(!saveStatusEl) return;
     if(!SUPABASE_CONFIGURED){ saveStatusEl.style.display = 'none'; return; }
