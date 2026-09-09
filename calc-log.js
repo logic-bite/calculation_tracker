@@ -1637,6 +1637,30 @@
     if(e.detail && e.detail.tool==='calclog'){ renderGrid(); renderHeaderGrid(); }
   });
 
+  // Belt-and-suspenders fix for the "calculator renders at 1px and looks
+  // blank" bug: cellSize()/headerColWidth() size everything off clientWidth,
+  // which is 0 while #calcPanel is display:none (e.g. on first load before
+  // app-shell.js shows this tab, or if it ever stops firing
+  // 'toolbox:tabshown'). Rather than relying on being told when we become
+  // visible, watch the grids themselves and re-render the instant they get
+  // a real, non-zero size. This makes the layout self-healing regardless of
+  // how or when app-shell.js reveals the panel.
+  if(typeof ResizeObserver !== 'undefined'){
+    let lastBtnWidth = 0, lastHeaderWidth = 0;
+    const gridObserver = new ResizeObserver(entries=>{
+      for(const entry of entries){
+        const w = entry.contentRect.width;
+        if(entry.target === btnGrid){
+          if(w > 0 && w !== lastBtnWidth){ lastBtnWidth = w; renderGrid(); }
+        } else if(entry.target === headerGrid){
+          if(w > 0 && w !== lastHeaderWidth){ lastHeaderWidth = w; renderHeaderGrid(); }
+        }
+      }
+    });
+    gridObserver.observe(btnGrid);
+    gridObserver.observe(headerGrid);
+  }
+
   // Panels used to live as draggable/resizable tiles inside the header grid
   // (ids prefixed "cp_"). They've moved to their own collapsible section
   // below the calculator, so on upgrade we just drop any leftover header
