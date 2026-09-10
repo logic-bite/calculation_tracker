@@ -22,6 +22,19 @@ function extendUnlock(){
   localStorage.setItem(KEY_UNLOCK_UNTIL, String(Date.now() + UNLOCK_DAYS*24*60*60*1000));
 }
 
+// Fires the "user is unlocked, go sync" signal. We can't just call
+// window.__toolboxOnUnlock() directly here: that function is defined inside
+// calc-log.js, which loads AFTER this file. If the Supabase session check
+// below resolves before calc-log.js has finished loading (very common,
+// since it's often just a fast local-storage read), the direct call would
+// silently no-op and sync would never initialize — leaving the save
+// indicator stuck on "Saving…" forever. Using an event plus a flag makes
+// this work regardless of script load order.
+function fireUnlock(){
+  window.__toolboxUnlocked = true;
+  document.dispatchEvent(new CustomEvent('toolbox-unlock'));
+}
+
 const lockOverlay = document.getElementById('lockOverlay');
 const lockForm = document.getElementById('lockForm');
 const lockInput = document.getElementById('lockPinInput');
@@ -43,7 +56,7 @@ async function tryAutoUnlock(){
     const { data } = await supabaseClient.auth.getSession();
     if(data && data.session){
       hideLock();
-      if(window.__toolboxOnUnlock) window.__toolboxOnUnlock();
+      fireUnlock();
     } else {
       showLock();
     }
@@ -68,7 +81,7 @@ if(lockForm){
       } else {
         extendUnlock();
         hideLock();
-        if(window.__toolboxOnUnlock) window.__toolboxOnUnlock();
+        fireUnlock();
       }
     }catch(err){
       lockError.textContent = 'Could not reach the server — check your connection.';

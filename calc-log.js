@@ -257,7 +257,14 @@
       if(pendingSync){ performSync(); }
     }
   }
-  window.__toolboxOnUnlock = pullAndReconcile;
+  window.__toolboxOnUnlock = pullAndReconcile; // kept for backward compatibility
+  // Listen for the unlock event instead of relying solely on auth.js calling
+  // window.__toolboxOnUnlock() directly — that direct call can fire before this
+  // script has finished loading (auth.js loads first), which used to silently
+  // skip reconciliation, leave `reconciled` stuck false, and make every save
+  // spin on "Saving…" forever without ever reaching the cloud.
+  document.addEventListener('toolbox-unlock', pullAndReconcile);
+  if(window.__toolboxUnlocked) pullAndReconcile(); // unlock already happened before we loaded
   setSyncStatus(SUPABASE_CONFIGURED ? 'saved' : null);
   if(!SUPABASE_CONFIGURED) reconciled = true;
 
